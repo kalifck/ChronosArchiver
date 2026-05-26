@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ChronosArchiver - Settings & Migration</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="options.css">
+    <!-- Load Dexie and options logic -->
+    <script src="vendor/dexie.min.js"></script>
+    <script src="db.js"></script>
+    <script src="options.js"></script>
+</head>
+<body>
+    <div class="settings-container">
+        <!-- Navigation Header -->
+        <header class="settings-header animate-fade-in">
+            <div class="brand">
+                <div class="logo-icon">⏳</div>
+                <h1>ChronosArchiver <span class="badge">Settings</span></h1>
+            </div>
+            <a href="dashboard.html" class="btn btn-secondary">Go to Dashboard</a>
+        </header>
+
+        <main class="settings-grid">
+            <!-- Left Side: Import Options -->
+            <section class="settings-card animate-slide-up" id="import-card">
+                <div class="card-header">
+                    <span class="card-icon">📥</span>
+                    <h2>Import History from CSV</h2>
+                </div>
+                <p class="card-desc">Stream and archive external browsing history locally. Works with CSV files from Google Takeout or other history exporters.</p>
+                
+                <div class="csv-requirements">
+                    <h3>Required CSV Columns:</h3>
+                    <ul>
+                        <li><code>url</code> - The visited URL (e.g. <code>https://google.com</code>)</li>
+                        <li><code>title</code> - Page title (e.g. <code>Google</code>)</li>
+                        <li><code>timestamp</code> - Visit epoch milliseconds or seconds (e.g. <code>1716723223000</code>)</li>
+                    </ul>
+                </div>
+
+                <div class="drop-zone" id="csv-drop-zone">
+                    <span class="drop-icon">📄</span>
+                    <span class="drop-text">Drag & Drop history.csv here or <span class="highlight">browse files</span></span>
+                    <input type="file" id="csv-file-input" accept=".csv" class="file-input-hidden">
+                </div>
+
+                <div class="progress-container hidden" id="import-progress-container">
+                    <div class="progress-info">
+                        <span id="import-status">Parsing & importing records...</span>
+                        <span id="import-count">0 items</span>
+                    </div>
+                    <div class="progress-bar-outer">
+                        <div class="progress-bar-inner animate-pulse" id="import-progress-bar" style="width: 0%"></div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Right Side: Transfer & Migration -->
+            <section class="settings-card animate-slide-up" id="transfer-card" style="animation-delay: 0.1s;">
+                <div class="card-header">
+                    <span class="card-icon">💻</span>
+                    <h2>Transfer to New Computer</h2>
+                </div>
+                <p class="card-desc">Easily migrate your entire high-performance local history database to a new system with full integrity.</p>
+
+                <div class="migration-instructions">
+                    <div class="step">
+                        <span class="step-num">1</span>
+                        <div class="step-text">
+                            <strong>Export Database:</strong> Click the button below to generate a chunked JSON backup file containing all visits.
+                        </div>
+                    </div>
+                    <div class="step">
+                        <span class="step-num">2</span>
+                        <div class="step-text">
+                            <strong>Import on New PC:</strong> Install ChronosArchiver on the new machine, open this settings page, and select the backup file.
+                        </div>
+                    </div>
+                </div>
+
+                <div class="migration-actions">
+                    <button class="btn btn-primary" id="btn-export-db">
+                        <span class="btn-icon">📤</span> Export Full Database (.json)
+                    </button>
+                    
+                    <div class="restore-zone" id="restore-zone">
+                        <button class="btn btn-outline" id="btn-trigger-restore">
+                            <span class="btn-icon">📥</span> Import Backup JSON
+                        </button>
+                        <input type="file" id="restore-file-input" accept=".json" class="file-input-hidden">
+                    </div>
+                </div>
+
+                <div class="progress-container hidden" id="restore-progress-container">
+                    <div class="progress-info">
+                        <span id="restore-status">Restoring backup...</span>
+                        <span id="restore-count">0%</span>
+                    </div>
+                    <div class="progress-bar-outer">
+                        <div class="progress-bar-inner" id="restore-progress-bar" style="width: 0%"></div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Support & Donations Card -->
+            <section class="settings-card support-card animate-slide-up" id="support-card" style="animation-delay: 0.15s; grid-column: 1 / -1;">
+                <div class="card-header">
+                    <span class="card-icon">☕</span>
+                    <h2>Support the Project</h2>
+                </div>
+                <div class="support-content">
+                    <p class="card-desc">ChronosArchiver is 100% free, open-source, and local-first. Built with 💻 and ☕ with love from <strong>Morocco 🇲🇦 Salam!</strong> If this persistent offline vault has saved your digital memory, feel free to support the project!</p>
+                    
+                    <div class="donation-row">
+                        <div class="crypto-badge">
+                            <span class="crypto-icon">⟠</span>
+                            <div class="crypto-details">
+                                <span class="crypto-title">Ethereum (ETH) Address</span>
+                                <span class="crypto-val" id="eth-address">0xA3f17d559900FEA12C18C184C2483E53626FED62</span>
+                            </div>
+                            <button class="btn btn-sm btn-secondary copy-btn" id="btn-copy-eth" title="Copy Address">Copy</button>
+                        </div>
+
+                        <div class="crypto-badge">
+                            <span class="crypto-icon">🌐</span>
+                            <div class="crypto-details">
+                                <span class="crypto-title">ENS Domain Name</span>
+                                <span class="crypto-val" id="ens-domain">charif.eth</span>
+                            </div>
+                            <button class="btn btn-sm btn-secondary copy-btn" id="btn-copy-ens" title="Copy ENS">Copy</button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Bottom Area: Danger Zone -->
+            <section class="settings-card danger-card animate-slide-up" style="animation-delay: 0.2s; grid-column: 1 / -1;">
+                <div class="card-header">
+                    <span class="card-icon">⚠️</span>
+                    <h2>Danger Zone</h2>
+                </div>
+                <div class="danger-actions">
+                    <div class="danger-info">
+                        <h3>Wipe Local Database</h3>
+                        <p>Permanently delete all stored browsing history. This action is irreversible.</p>
+                    </div>
+                    <button class="btn btn-danger" id="btn-wipe-db">Wipe All History</button>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Confirm Modal -->
+    <div class="modal-overlay hidden" id="confirm-modal">
+        <div class="modal-content animate-zoom-in">
+            <h2 id="modal-title">Are you absolutely sure?</h2>
+            <p id="modal-body">This will permanently delete all records inside your local history database. Make sure you have exported a backup if you need this data.</p>
+            <div class="modal-buttons">
+                <button class="btn btn-secondary" id="modal-cancel">Cancel</button>
+                <button class="btn btn-danger" id="modal-confirm">Wipe Database</button>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ChronosArchiver - Analytics & History</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="dashboard.css">
+    <!-- Load vendor files, DB, and main page logic -->
+    <script src="vendor/dexie.min.js"></script>
+    <script src="db.js"></script>
+    <script src="vendor/chart.umd.js"></script>
+    <script src="dashboard.js"></script>
+</head>
+<body>
+    <div class="dashboard-container">
+        <!-- Modern Glass Header -->
+        <header class="dashboard-header animate-fade-in">
+            <div class="brand">
+                <span class="logo-icon">⏳</span>
+                <div class="brand-text">
+                    <h1>ChronosArchiver</h1>
+                    <p>Uncapped Local Browsing Vault</p>
+                </div>
+            </div>
+
+            <!-- Stats Bar -->
+            <div class="stats-row">
+                <div class="stat-card">
+                    <span class="stat-label">Total Visits</span>
+                    <span class="stat-val" id="stat-total-visits">-</span>
+                </div>
+                <div class="stat-card">
+                    <span class="stat-label">Unique Domains</span>
+                    <span class="stat-val" id="stat-unique-domains">-</span>
+                </div>
+                <div class="stat-card">
+                    <span class="stat-label">Daily Avg Visits</span>
+                    <span class="stat-val" id="stat-daily-avg">-</span>
+                </div>
+            </div>
+
+            <div class="header-actions">
+                <a href="options.html#support-card" class="btn btn-outline support-project-btn" style="border-color: rgba(167, 139, 250, 0.4); color: #C7D2FE;">
+                    <span class="icon">☕</span> Support Project
+                </a>
+                <a href="options.html" class="btn btn-outline">
+                    <span class="icon">⚙️</span> Settings
+                </a>
+            </div>
+        </header>
+
+        <!-- Diagnostic Status Bar -->
+        <div id="diagnostic-banner" class="diagnostic-banner hidden">
+            <span id="diagnostic-text">System Diagnostics: Loading...</span>
+        </div>
+
+        <!-- Main Dashboard Content Grid -->
+        <div class="dashboard-grid">
+            
+            <!-- Left Side: History Search, Filters & DOM Virtualized List -->
+            <main class="history-section animate-slide-up" style="animation-delay: 0.05s;">
+                <div class="section-title-row">
+                    <h2>Browsing Chronicle</h2>
+                    <span class="record-counter" id="record-count-label">Loading history...</span>
+                </div>
+
+                <!-- Search & Filters Panel -->
+                <div class="filter-panel">
+                    <div class="search-box-row">
+                        <div class="search-input-wrapper">
+                            <span class="search-icon">🔍</span>
+                            <input type="text" id="search-input" placeholder="Keyword search (URL, page title, or domain)..." autocomplete="off">
+                            <button class="clear-btn hidden" id="btn-clear-search">✕</button>
+                        </div>
+                        <div class="sort-wrapper">
+                            <select id="sort-select" class="form-select">
+                                <option value="desc">Newest First</option>
+                                <option value="asc">Oldest First</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Fine-grained Date Filters -->
+                    <div class="date-filters-row">
+                        <div class="date-input-group">
+                            <label for="filter-start-date">From</label>
+                            <input type="date" id="filter-start-date" class="form-input">
+                        </div>
+                        <div class="date-input-group">
+                            <label for="filter-end-date">To</label>
+                            <input type="date" id="filter-end-date" class="form-input">
+                        </div>
+                        <div class="filter-actions-group">
+                            <button class="btn btn-sm btn-outline hidden" id="btn-reset-filters">Reset Filters</button>
+                            <button class="btn btn-sm btn-primary" id="btn-export-filtered">
+                                📥 Export (CSV)
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Active Filter Chips -->
+                    <div class="active-chips-row hidden" id="chips-container">
+                        <span class="chip-label">Active Filter:</span>
+                        <div class="chips-list" id="chips-list">
+                            <!-- Injected chips go here -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Contextual Subpath Path Drill-Down Pane -->
+                <div class="drilldown-panel hidden" id="drilldown-panel">
+                    <div class="drilldown-header">
+                        <span class="drilldown-title">📍 Context Drill-Down: Top Subpaths on <span id="drilldown-domain-label" class="highlight">-</span></span>
+                        <button class="drilldown-close-btn" id="btn-close-drilldown">✕</button>
+                    </div>
+                    <div class="drilldown-pills" id="drilldown-pills-list">
+                        <!-- Dynamic pills generated in JS -->
+                    </div>
+                </div>
+
+                <!-- Virtualized Viewport Container -->
+                <div class="virtual-scroll-viewport" id="virtual-scroll-viewport">
+                    <!-- High-performance scrolling placeholder -->
+                    <div class="virtual-scroll-spacer" id="virtual-scroll-spacer"></div>
+                    <!-- Absolutely positioned inner container containing active rendered DOM elements -->
+                    <div class="virtual-scroll-content" id="virtual-scroll-content">
+                        <!-- Items dynamically generated in JS (rendered: 20-30 rows maximum) -->
+                    </div>
+                    <!-- Empty State View -->
+                    <div class="empty-state hidden" id="history-empty-state">
+                        <span class="empty-icon">📂</span>
+                        <h3>No browsing history matches the criteria</h3>
+                        <p>Try resetting active filters or adjusting your date range.</p>
+                    </div>
+                </div>
+            </main>
+
+            <!-- Right Side: Premium Tabbed Analytics Section -->
+            <aside class="analytics-section animate-slide-up" style="animation-delay: 0.15s;">
+                <!-- Segmented Control Tab Bar -->
+                <div class="analytics-tab-bar">
+                    <button class="tab-btn active" data-tab="tab-heatmap">📅 When</button>
+                    <button class="tab-btn" data-tab="tab-keywords">🔍 What</button>
+                    <button class="tab-btn" data-tab="tab-trends">📈 Trends</button>
+                    <button class="tab-btn" data-tab="tab-domains">🍩 Who</button>
+                    <button class="tab-btn" data-tab="tab-insights">💡 Insights</button>
+                </div>
+
+                <!-- Dynamic Views Viewport -->
+                <div class="analytics-tab-viewport">
+                    
+                    <!-- Panel 1: Heatmap (When) -->
+                    <div class="analytics-tab-panel active" id="tab-heatmap">
+                        <div class="chart-card heatmap-card">
+                            <div class="heatmap-card-header">
+                                <h3>Hourly Activity Heatmap (Last 90 Days)</h3>
+                                <span class="card-subtitle">Blocks represent hourly volume. Hover for details, click to filter.</span>
+                            </div>
+                            <div class="heatmap-scroll-container">
+                                <div class="heatmap-wrapper">
+                                    <!-- Header hours -->
+                                    <div class="heatmap-hours-header">
+                                        <div class="hour-label-spacer"></div>
+                                        <div class="hours-row">
+                                            <span>12A</span><span>1A</span><span>2A</span><span>3A</span><span>4A</span><span>5A</span><span>6A</span><span>7A</span><span>8A</span><span>9A</span><span>10A</span><span>11A</span>
+                                            <span>12P</span><span>1P</span><span>2P</span><span>3P</span><span>4P</span><span>5P</span><span>6P</span><span>7P</span><span>8P</span><span>9P</span><span>10P</span><span>11P</span>
+                                        </div>
+                                    </div>
+                                    <!-- Heatmap rows -->
+                                    <div class="heatmap-grid" id="heatmap-grid-container">
+                                        <!-- Dynamically generated via JS -->
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Panel 2: Top Search Keywords (What) -->
+                    <div class="analytics-tab-panel" id="tab-keywords">
+                        <div class="chart-card tall-chart-card">
+                            <h3>Top Search Keywords</h3>
+                            <div class="chart-container">
+                                <canvas id="chart-top-keywords"></canvas>
+                                <div class="chart-placeholder hidden" id="keywords-chart-placeholder">
+                                    <span>No search queries found.</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Panel 3: Stacked Category Spikes (Trends) -->
+                    <div class="analytics-tab-panel" id="tab-trends">
+                        <div class="chart-card tall-chart-card">
+                            <h3>Topic Spikes (Category Timeline)</h3>
+                            <div class="chart-container">
+                                <canvas id="chart-visits-trend"></canvas>
+                                <div class="chart-placeholder hidden" id="trend-chart-placeholder">
+                                    <span>No category spike data.</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Panel 4: Top Visited Domains (Who) -->
+                    <div class="analytics-tab-panel" id="tab-domains">
+                        <div class="chart-card tall-chart-card">
+                            <h3>Top Visited Domains</h3>
+                            <div class="chart-container">
+                                <canvas id="chart-top-domains"></canvas>
+                                <div class="chart-placeholder hidden" id="domain-chart-placeholder">
+                                    <span>No domain data available.</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Panel 5: Detailed Diagnostics (Insights) -->
+                    <div class="analytics-tab-panel" id="tab-insights">
+                        <div class="chart-card tall-chart-card insights-card">
+                            <h3>Historical Diagnostics</h3>
+                            <div class="insights-container" id="insights-container">
+                                <div class="insight-item">
+                                    <span class="insight-icon">🔥</span>
+                                    <div class="insight-text">
+                                        <span class="insight-title">Peak Activity Hour</span>
+                                        <span class="insight-value" id="insight-peak-time">-</span>
+                                    </div>
+                                </div>
+                                <div class="insight-item">
+                                    <span class="insight-icon">📅</span>
+                                    <div class="insight-text">
+                                        <span class="insight-title">Most Active Day</span>
+                                        <span class="insight-value" id="insight-active-day">-</span>
+                                    </div>
+                                </div>
+                                <div class="insight-item">
+                                    <span class="insight-icon">🔍</span>
+                                    <div class="insight-text">
+                                        <span class="insight-title">Search Volume Ratio</span>
+                                        <span class="insight-value" id="insight-search-velocity">-</span>
+                                    </div>
+                                </div>
+                                <div class="insight-item">
+                                    <span class="insight-icon">🌐</span>
+                                    <div class="insight-text">
+                                        <span class="insight-title">Focus Category</span>
+                                        <span class="insight-value" id="insight-focus-category">-</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </aside>
+
+        </div>
+    </div>
+</body>
+</html>

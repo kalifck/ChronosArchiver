@@ -1,0 +1,23 @@
+# IDE & Editor Files
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.swp
+
+# OS Files
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Database & CSV Backup Temp Files
+*.json.bak
+*.csv.bak
+scratch/
+
+# Build/Release Artifacts
+# We can allow the release zip to be committed if the user wants to distribute it directly from GitHub releases!
+# chronos_archiver_release.zip

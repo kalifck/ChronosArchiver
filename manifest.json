@@ -1,0 +1,31 @@
+{
+  "manifest_version": 3,
+  "name": "ChronosArchiver - Permanent Local History",
+  "version": "1.0.0",
+  "description": "Permanently stores your browsing history locally in IndexedDB, bypassing the 90-day limit, with advanced interactive analytics.",
+  "permissions": [
+    "history",
+    "storage",
+    "unlimitedStorage",
+    "downloads"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "classic"
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "action": {
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    },
+    "default_title": "Open ChronosArchiver Dashboard"
+  },
+  "options_page": "options.html",
+  "minimum_chrome_version": "88"
+}
