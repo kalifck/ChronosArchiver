@@ -5,7 +5,6 @@
   "description": "Permanently stores your browsing history locally in IndexedDB, bypassing the 90-day limit, with advanced interactive analytics.",
   "permissions": [
     "history",
-    "storage",
     "unlimitedStorage",
     "downloads"
   ],
