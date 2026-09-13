@@ -6,6 +6,16 @@ ChronosArchiver is a production-grade, highly optimized, and **100% private** Ch
 
 ---
 
+## 🚀 What's New in Version 1.2.0
+
+* **🧠 3D Holographic Cognitive Mindscape**: Full 3D anatomical neural brain matrix featuring dual cerebral hemispheres, 368 parametric cortical nodes, over 1,300 glowing synapses with depth attenuation, and 38 action potential cascades flashing across fibers.
+* **🪐 Dynamic Thought Satellites & Cycling Engine**: Orbiting satellites dynamically pull from your active browsing history, fading out, picking new search terms from your dynamic thought pool, re-tethering across cortical nodes, and blooming back in.
+* **🏷️ First-Class Category Filter Engine**: Instant filtering across *Tech & Learning*, *Search Engines*, *Entertainment*, and *Social & Forums*. Click any lobe or HUD telemetry badge to instantly isolate matching history visits in the chronicle.
+* **🌊 Cognitive Rhythm & Sprint-Dip Meter**: Refractory wave model that calculates your browsing momentum and detects whether you are in a *Hyperfocus Sprint* or *Recovery Dip* phase.
+* **⏱️ Rolling Time Windows**: Switch between `30D`, `90D`, `1Y`, and `All-Time` for search keywords, and `14D`, `30D`, and `90D` for topic spikes.
+
+---
+
 ## 🌟 Core Features
 
 * **🔒 100% Local & Private First**: All indexing and storage occurs entirely on your device using IndexedDB. Zero external network calls, zero tracking, zero data collections.
