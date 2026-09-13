@@ -9,13 +9,15 @@ ChronosArchiver is a production-grade, highly optimized, and **100% private** Ch
 ## 🌟 Core Features
 
 * **🔒 100% Local & Private First**: All indexing and storage occurs entirely on your device using IndexedDB. Zero external network calls, zero tracking, zero data collections.
-* **🧠 Cognitive Mindscape (Neural Brain Canvas)**: Real-time interactive 2D Canvas neural model visualizing cognitive lobes (*Tech, Exploration, Media, Social*), pulsating synaptic connections, electric impulses, and floating thought particles carrying recent search queries.
+* **🧠 3D Holographic Mindscape (Neural Brain Canvas)**: Real-time 3D parametric neural model with 368 anatomical cortical nodes, 1,300+ bioluminescent synaptic connections, 360° orbit controls, and action potential cascades.
+* **🪐 Dynamic Thought Streamer & Cycling Satellites**: Orbiting thought satellites automatically harvest your live queries and domains, organically fading out, swapping terms, and re-tethering across cortical lobes with an emergence bloom.
+* **🏷️ First-Class Category Filter Engine**: Click any functional lobe or telemetry stat (*Frontal / Tech, Parietal / Search, Temporal / Media, Limbic / Social*) or category spike to instantly isolate matching history records in real-time.
 * **🌊 Cognitive Rhythm & Sprint-Dip Meter**: Mathematical refractory model explaining browsing momentum and focus waves—detecting when you are in a **Hyperfocus Sprint** vs. a **Recovery Dip** phase.
 * **📂 Uncapped Persistent Storage**: Holds 500,000+ visit records seamlessly by utilizing Dexie's index-only cursor scans to perform statistics and search queries without loading bulk rows into RAM.
 * **⚡ 60FPS DOM Virtual Scroll**: Custom-engineered virtualized list chronicle that renders only 20–30 DOM rows in the viewport, pulling records by primary key dynamically during scrolls to prevent browser lag.
 * **📅 Interactive "When" Heatmap**: A custom HTML/CSS Grid (7 days × 24 hours) showing hourly density. Click any cell to instantly filter your entire history to visits that occurred during that specific hour and weekday.
 * **🔍 "What" Multi-Word Keyword Search with Rolling Windows**: Uses a dynamic multi-entry prefix index (`*keywords`) with quick time-range toggles (**30D | 90D | 1Y | All Time**) to pinpoint evolving search interests over time.
-* **📈 Stacked Interest Trends (14D | 30D | 90D)**: Line chart displaying your topic interest spikes (*Tech & Learning, Entertainment, Forums, Shopping, and Search Engines*) over customizable rolling timelines.
+* **📈 Stacked Interest Trends (14D | 30D | 90D)**: Interactive line chart displaying topic interest spikes (*Tech & Learning, Entertainment, Forums, Shopping, and Search Engines*) over customizable rolling timelines.
 * **🍩 Domain & Subpath Drill-Down**: Interactive doughnut chart showing top domains. Click a slice to filter, revealing an active drill-down pane that parses and ranks the top subdirectories you browse (e.g., specific subreddits or GitHub repositories).
 * **📤 Instant JSON & CSV Migrations**: Export your custom query segments to a CSV instantly via Chrome's native downloads API, or drag-and-drop chunked JSON backups to move your database to a new system.
 * **🇲🇦 Built with Antigravity in Morocco**: Engineered with **⚡ Google Antigravity**, featuring a warm greeting and an animated **"Confetti & Emoji Spawner"** easter egg when copying support addresses!
@@ -34,13 +36,13 @@ ChronosArchiver is a production-grade, highly optimized, and **100% private** Ch
 ## 📂 File Architecture
 
 ```bash
-├── manifest.json         # Extension Manifest V3 metadata and permissions config
+├── manifest.json         # Extension Manifest V3 metadata and permissions config (v1.2.0)
 ├── background.js         # Debounced background worker (listens to visit notifications)
-├── db.js                 # Database schema definition (Schema Version 2) and keyword indexer
+├── db.js                 # Database schema definition (Schema Version 3) and keyword indexer
 ├── import-worker.js      # Multi-threaded streaming Web Worker for CSV parser
 ├── dashboard.html        # Main dashboard interface
 ├── dashboard.css         # Styling system, responsive grid layouts, animations
-├── dashboard.js          # Chart rendering, virtualized scroll logic, filters, and tab controllers
+├── dashboard.js          # 3D Neural Mindscape, Chart rendering, virtualized scroll logic, and filters
 ├── options.html          # Settings, database backup migration panel, and Moroccan support card
 ├── options.css           # Option styles, drag-and-drop drop zones, custom success indicators
 ├── options.js            # JSON backup engine, options event bindings, and interactive copy burst

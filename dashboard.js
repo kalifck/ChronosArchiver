@@ -55,6 +55,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // State Variables
     let activeDomainFilter = null;
+    let activeCategoryFilter = null;
     let startDateFilter = null;
     let endDateFilter = null;
     let sortOrder = 'desc'; // 'desc' (newest) or 'asc' (oldest)
@@ -75,7 +76,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Cognitive Mindscape Neural Animation State
     let isMindTabActive = false;
     let mindscapeAnimFrameId = null;
-    let topRecentSearchKeywords = ['build123d', 'fiat tris', 'google', 'archiver', 'vault'];
+    let topRecentSearchKeywords = ['local history', 'indexeddb', 'privacy vault', 'offline first', 'chronos'];
+    let activeThoughtPool = ['local history', 'indexeddb', 'privacy vault', 'offline first', 'chronos', 'analytics'];
+    let thoughtPoolCursor = 0;
 
     // Chart.js instances
     let chartDomains = null;
@@ -124,6 +127,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             // Query database and build the interactive charts
             await updateCharts();
+
+            // Populate rich dynamic thought pool from user history
+            await updateDynamicThoughtPool(keywordsTimeRange);
 
             // Initialize Cognitive Mindscape Canvas Engine
             initCognitiveMindscape();
@@ -434,6 +440,15 @@ document.addEventListener('DOMContentLoaded', async () => {
                             ticks: { color: '#9CA3AF', font: { family: 'Inter', size: 9 } },
                             beginAtZero: true
                         }
+                    },
+                    onClick: (event, elements) => {
+                        if (elements.length > 0) {
+                            const datasetIndex = elements[0].datasetIndex;
+                            const catName = chartTrends.data.datasets[datasetIndex]?.label;
+                            if (catName) {
+                                toggleCategoryFilter(catName);
+                            }
+                        }
                     }
                 }
             });
@@ -449,22 +464,67 @@ document.addEventListener('DOMContentLoaded', async () => {
      * @returns {string}
      */
     function getCategory(domain) {
-        const d = (domain || '').toLowerCase();
-        if (d.includes('youtube.com') || d.includes('netflix.com') || d.includes('twitch.tv') || d.includes('vimeo.com') || d.includes('spotify.com') || d.includes('soundcloud.com')) {
-            return 'Entertainment';
-        }
-        if (d.includes('github.com') || d.includes('stackoverflow.com') || d.includes('medium.com') || d.includes('dev.to') || d.includes('wikipedia.org') || d.includes('mdn.mozilla.org') || d.includes('w3schools.com') || d.includes('npmjs.com') || d.includes('openscad.org')) {
-            return 'Tech & Learning';
-        }
-        if (d.includes('amazon.com') || d.includes('ebay.com') || d.includes('aliexpress.com') || d.includes('etsy.com') || d.includes('shopify.com') || d.includes('walmart.com') || d.includes('taobao.com')) {
-            return 'Shopping';
-        }
-        if (d.includes('reddit.com') || d.includes('quora.com') || d.includes('discord.com') || d.includes('facebook.com') || d.includes('twitter.com') || d.includes('x.com') || d.includes('linkedin.com') || d.includes('instagram.com')) {
-            return 'Social & Forums';
-        }
-        if (d.includes('google.com') || d.includes('bing.com') || d.includes('duckduckgo.com') || d.includes('yahoo.com') || d.includes('baidu.com')) {
-            return 'Search Engines';
-        }
+        const d = (domain || '').toLowerCase().trim();
+        if (!d || d === 'unknown') return 'Tech & Learning';
+
+        // 1. Entertainment (Media, streaming, gaming, audio, video)
+        const entTargets = [
+            'youtube.com', 'youtu.be', 'netflix.com', 'twitch.tv', 'vimeo.com',
+            'spotify.com', 'soundcloud.com', 'disneyplus.com', 'hulu.com',
+            'max.com', 'hbomax.com', 'primevideo.com', 'crunchyroll.com',
+            'imdb.com', 'steampowered.com', 'steamcommunity.com', 'epicgames.com',
+            'ign.com', 'kotaku.com', 'dailymotion.com', 'deezer.com'
+        ];
+        if (entTargets.some(t => d === t || d.endsWith('.' + t))) return 'Entertainment';
+        if (d.includes('stream') || d.includes('anime') || d.includes('manga') || d.includes('movie')) return 'Entertainment';
+
+        // 2. Social & Forums (Social networks, forums, chat, communities)
+        const socialTargets = [
+            'reddit.com', 'redd.it', 'quora.com', 'discord.com', 'discord.gg',
+            'facebook.com', 'fb.com', 'twitter.com', 't.co', 'x.com',
+            'linkedin.com', 'instagram.com', 'tiktok.com', 'threads.net',
+            'pinterest.com', 'tumblr.com', 'bluesky.app', 'bsky.app', 'mastodon.social',
+            'telegram.org', 't.me', 'whatsapp.com', 'messenger.com',
+            'wechat.com', 'weibo.com', 'vk.com', 'news.ycombinator.com',
+            'lobste.rs', 'discourse.org', 'slack.com'
+        ];
+        if (socialTargets.some(t => d === t || d.endsWith('.' + t))) return 'Social & Forums';
+        if (d.includes('forum') || d.includes('community') || d.includes('discuss')) return 'Social & Forums';
+
+        // 3. Search Engines (Web search, portals)
+        const searchTargets = [
+            'bing.com', 'duckduckgo.com', 'ddg.gg', 'yahoo.com',
+            'baidu.com', 'ecosia.org', 'kagi.com', 'brave.com',
+            'startpage.com', 'searx.be', 'searx.me', 'qwant.com', 'yandex.ru', 'yandex.com'
+        ];
+        if (searchTargets.some(t => d === t || d.endsWith('.' + t))) return 'Search Engines';
+        if (d.startsWith('google.') || d.includes('.google.') || d.startsWith('yandex.')) return 'Search Engines';
+
+        // 4. Shopping (E-commerce, marketplaces)
+        const shoppingTargets = [
+            'ebay.com', 'aliexpress.com', 'etsy.com', 'shopify.com',
+            'walmart.com', 'taobao.com', 'target.com', 'bestbuy.com', 'costco.com',
+            'temu.com', 'shein.com', 'ikea.com', 'newegg.com', 'craigslist.org'
+        ];
+        if (shoppingTargets.some(t => d === t || d.endsWith('.' + t))) return 'Shopping';
+        if (d.startsWith('amazon.') || d.includes('.amazon.')) return 'Shopping';
+        if (d.includes('shop') || d.includes('store')) return 'Shopping';
+
+        // 5. Tech & Learning (Development, documentation, knowledge, AI, research)
+        const techTargets = [
+            'github.com', 'gitlab.com', 'stackoverflow.com', 'stackexchange.com',
+            'superuser.com', 'serverfault.com', 'medium.com', 'dev.to',
+            'wikipedia.org', 'wikimedia.org', 'mdn.mozilla.org', 'developer.mozilla.org',
+            'w3schools.com', 'npmjs.com', 'pypi.org', 'openscad.org', 'arxiv.org',
+            'docs.google.com', 'notion.so', 'chatgpt.com', 'openai.com',
+            'claude.ai', 'anthropic.com', 'gemini.google.com', 'huggingface.co',
+            'kaggle.com', 'codepen.io', 'replit.com', 'coursera.org', 'edx.org',
+            'udemy.com', 'freecodecamp.org', 'css-tricks.com', 'geeksforgeeks.org',
+            'hashnode.com', 'sublimehq.com', 'jetbrains.com'
+        ];
+        if (techTargets.some(t => d === t || d.endsWith('.' + t))) return 'Tech & Learning';
+        if (d.includes('learn') || d.includes('docs') || d.includes('dev') || d.includes('code') || d.includes('wiki') || d.includes('.edu')) return 'Tech & Learning';
+
         return 'Tech & Learning'; // General Default focus category
     }
 
@@ -499,6 +559,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (sorted.length === 0) {
                 placeholderKeywords.classList.remove('hidden');
                 if (chartKeywords) chartKeywords.destroy();
+                await updateDynamicThoughtPool(days);
                 return;
             }
 
@@ -510,9 +571,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             // Sync top recent search keywords to fuel the thought particles on the Mindscape canvas!
             if (labels.length > 0) {
-                topRecentSearchKeywords = labels.slice(0, 8);
-                refreshThoughtParticles();
+                topRecentSearchKeywords = labels;
             }
+            await updateDynamicThoughtPool(days);
 
             if (chartKeywords) {
                 chartKeywords.destroy();
@@ -687,60 +748,394 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (hudSearch) hudSearch.textContent = `${searchPct}%`;
         if (hudEnt) hudEnt.textContent = `${entPct}%`;
         if (hudSoc) hudSoc.textContent = `${socPct}%`;
+        updateHudCategoryHighlight();
 
-        // Update brain lobe intensities
-        if (brainLobes && brainLobes.length >= 4) {
-            brainLobes[0].intensity = (categorySums['Tech & Learning'] || 0) / safeTotal;
-            brainLobes[1].intensity = (categorySums['Search Engines'] || 0) / safeTotal;
-            brainLobes[2].intensity = (categorySums['Entertainment'] || 0) / safeTotal;
-            brainLobes[3].intensity = (categorySums['Social & Forums'] || 0) / safeTotal;
+        // Update 3D cognitive brain activity distribution & rhythm mode
+        cognitiveRhythmMode = (todayVisits >= 1.25 * median || momentum >= 35) ? 'sprint' : ((todayVisits <= 0.75 * median || momentum <= -25) ? 'dip' : 'steady');
+
+        cognitiveActivityDistribution['Tech & Learning'] = (categorySums['Tech & Learning'] || 0) / safeTotal;
+        cognitiveActivityDistribution['Search Engines'] = (categorySums['Search Engines'] || 0) / safeTotal;
+        cognitiveActivityDistribution['Entertainment'] = (categorySums['Entertainment'] || 0) / safeTotal;
+        cognitiveActivityDistribution['Social & Forums'] = (categorySums['Social & Forums'] || 0) / safeTotal;
+
+        if (brainNodes3D && brainNodes3D.length > 0) {
+            for (const node of brainNodes3D) {
+                if (cognitiveActivityDistribution[node.cat] !== undefined) {
+                    node.activity = 0.25 + cognitiveActivityDistribution[node.cat] * 1.5;
+                }
+            }
         }
     }
 
     // ----------------------------------------------------
-    // COGNITIVE MINDSCAPE: NEURAL CANVAS ANIMATION ENGINE
+    // COGNITIVE MINDSCAPE: 3D HOLOGRAPHIC NEURAL MATRIX
     // ----------------------------------------------------
 
-    const brainLobes = [
-        { id: 'tech', name: 'Frontal (Tech & Code)', cat: 'Tech & Learning', nx: 0.36, ny: 0.40, color: '#10B981', rgb: '16, 185, 129', intensity: 0.5, radius: 24 },
-        { id: 'search', name: 'Parietal (Exploration)', cat: 'Search Engines', nx: 0.64, ny: 0.35, color: '#60A5FA', rgb: '96, 165, 250', intensity: 0.3, radius: 22 },
-        { id: 'media', name: 'Temporal (Media & Flow)', cat: 'Entertainment', nx: 0.44, ny: 0.66, color: '#818CF8', rgb: '129, 140, 248', intensity: 0.25, radius: 20 },
-        { id: 'social', name: 'Limbic (Social)', cat: 'Social & Forums', nx: 0.66, ny: 0.64, color: '#F472B6', rgb: '244, 114, 182', intensity: 0.2, radius: 20 }
-    ];
+    let brainNodes3D = [];
+    let brainSynapses3D = [];
+    let actionPotentials = [];
+    let neuralShockwaves = [];
+    let holographicThoughts = [];
+    let ambientDustParticles = [];
 
-    const synapticConnections = [
-        [0, 1], [0, 2], [1, 3], [2, 3], [0, 3], [1, 2]
-    ];
-
+    let cameraRotation = { yaw: 0, pitch: 0.15 };
+    let targetRotation = { yaw: 0, pitch: 0.15 };
+    let isDraggingCanvas = false;
+    let lastDragMouse = { x: 0, y: 0 };
+    let hasUserDragged = false;
     let hoveredLobe = null;
+    let hoveredThought = null;
     let canvasMouse = { x: -1000, y: -1000 };
-    let thoughtParticles = [];
-    let synapticPulses = [];
+
+    let cognitiveRhythmMode = 'steady'; // 'sprint', 'dip', 'steady'
+    let cognitiveActivityDistribution = {
+        'Tech & Learning': 0.4,
+        'Search Engines': 0.3,
+        'Entertainment': 0.2,
+        'Social & Forums': 0.1
+    };
+
     let brainCanvas = null;
     let brainCtx = null;
+
+    /**
+     * Generates an anatomically structured 3D human brain point cloud:
+     * Dual cerebral hemispheres with longitudinal fissure, gyri convolutions,
+     * cerebellum, brainstem, and inter-hemispheric corpus callosum.
+     */
+    function generate3DBrainModel() {
+        const nodes = [];
+
+        // 1. Dual Cerebral Hemispheres (Left: s = -1, Right: s = +1)
+        for (const s of [-1, 1]) {
+            const N = 135;
+            for (let i = 0; i < N; i++) {
+                const u = Math.acos(1 - 2 * (i + 0.5) / N); // 0 to PI
+                const v = Math.PI * (1 + Math.sqrt(5)) * i; // Golden spiral
+
+                // Gyri & Sulci Convolutions (organic cortex fold harmonics)
+                const gyri = 0.085 * Math.sin(5 * u) * Math.cos(6 * v) + 0.045 * Math.sin(10 * u + 4 * v);
+                const r = 1.0 + gyri;
+
+                // Spatial coordinates with hemisphere separation for longitudinal fissure
+                let x = s * (Math.abs(Math.sin(u) * Math.cos(v)) * 0.68 + 0.075) * r;
+                let y = (Math.sin(u) * Math.sin(v) * 0.94) * r;
+                let z = (Math.cos(u) * 0.72) * r;
+
+                // Anatomical shaping
+                if (y > 0.25) {
+                    z += 0.08 * (y - 0.25); // Frontal pole elevation
+                }
+                if (y > -0.25 && y < 0.25 && z < 0.05 && z > -0.4) {
+                    x *= 1.18; // Temporal lateral bulge
+                    z -= 0.06;
+                }
+                if (z < -0.2) {
+                    x *= 0.88; // Basal tuck
+                    y *= 0.92;
+                }
+
+                // Categorization by functional cerebral lobes
+                let region = 'parietal';
+                let cat = 'Search Engines';
+                let color = '#38BDF8';
+                let rgb = '56, 189, 248';
+
+                if (y > 0.15) {
+                    region = 'frontal';
+                    cat = 'Tech & Learning';
+                    color = '#10B981';
+                    rgb = '16, 185, 129';
+                } else if (z < -0.05 && Math.abs(x) > 0.32) {
+                    region = 'temporal';
+                    cat = 'Entertainment';
+                    color = '#818CF8';
+                    rgb = '129, 140, 248';
+                } else if (y < -0.2) {
+                    region = 'limbic';
+                    cat = 'Social & Forums';
+                    color = '#F472B6';
+                    rgb = '244, 114, 182';
+                }
+
+                nodes.push({
+                    x, y, z,
+                    baseX: x, baseY: y, baseZ: z,
+                    region, cat, color, rgb,
+                    type: 'cortex',
+                    flashIntensity: 0,
+                    activity: 0.5,
+                    connections: []
+                });
+            }
+        }
+
+        // 2. Cerebellum (Dual posterior inferior lobes)
+        for (const s of [-1, 1]) {
+            const N = 26;
+            for (let i = 0; i < N; i++) {
+                const u = Math.acos(1 - 2 * (i + 0.5) / N);
+                const v = Math.PI * (1 + Math.sqrt(5)) * i;
+                const x = s * (Math.abs(Math.sin(u) * Math.cos(v)) * 0.34 + 0.06);
+                const y = -0.58 + Math.sin(u) * Math.sin(v) * 0.28;
+                const z = -0.42 + Math.cos(u) * 0.22;
+                nodes.push({
+                    x, y, z,
+                    baseX: x, baseY: y, baseZ: z,
+                    region: 'limbic', cat: 'Social & Forums',
+                    color: '#EC4899', rgb: '236, 72, 153',
+                    type: 'cerebellum',
+                    flashIntensity: 0,
+                    activity: 0.4,
+                    connections: []
+                });
+            }
+        }
+
+        // 3. Brainstem (Descending central neural pathway)
+        for (let i = 0; i < 16; i++) {
+            const t = i / 15;
+            const z = -0.32 - t * 0.42;
+            const y = -0.22 - t * 0.08;
+            const spread = (1 - t * 0.4) * 0.12;
+            const x = Math.sin(i * 1.7) * spread;
+            nodes.push({
+                x, y, z,
+                baseX: x, baseY: y, baseZ: z,
+                region: 'frontal', cat: 'Tech & Learning',
+                color: '#34D399', rgb: '52, 211, 153',
+                type: 'stem',
+                flashIntensity: 0,
+                activity: 0.6,
+                connections: []
+            });
+        }
+
+        // 4. Corpus Callosum (Deep inter-hemispheric bridging core)
+        for (let i = 0; i < 30; i++) {
+            const t = (i / 29) * 2 - 1;
+            const y = t * 0.48;
+            const z = 0.04 - (t * t) * 0.14;
+            const x = Math.sin(i * 3.14) * 0.12;
+            nodes.push({
+                x, y, z,
+                baseX: x, baseY: y, baseZ: z,
+                region: 'parietal', cat: 'Search Engines',
+                color: '#67E8F9', rgb: '103, 232, 249',
+                type: 'core',
+                flashIntensity: 0,
+                activity: 0.5,
+                connections: []
+            });
+        }
+
+        // Inter-synaptic 3D Proximity Mesh
+        const connections = [];
+        const threshold = 0.235;
+        for (let i = 0; i < nodes.length; i++) {
+            for (let j = i + 1; j < nodes.length; j++) {
+                const dx = nodes[i].x - nodes[j].x;
+                const dy = nodes[i].y - nodes[j].y;
+                const dz = nodes[i].z - nodes[j].z;
+                const dist = Math.hypot(dx, dy, dz);
+                if (dist < threshold) {
+                    connections.push({ a: i, b: j, dist });
+                    nodes[i].connections.push(j);
+                    nodes[j].connections.push(i);
+                }
+            }
+        }
+
+        return { nodes, connections };
+    }
+
+    function initAmbientDust() {
+        ambientDustParticles = [];
+        for (let i = 0; i < 35; i++) {
+            ambientDustParticles.push({
+                x: (Math.random() - 0.5) * 3.2,
+                y: (Math.random() - 0.5) * 3.2,
+                z: (Math.random() - 0.5) * 2.2,
+                vx: (Math.random() - 0.5) * 0.0015,
+                vy: (Math.random() - 0.5) * 0.0015,
+                vz: (Math.random() - 0.5) * 0.0015,
+                size: 1.0 + Math.random() * 1.5,
+                alpha: 0.2 + Math.random() * 0.4
+            });
+        }
+    }
+
+    /**
+     * Extracts an intelligent, rich pool of 20-40 actual search queries, domains,
+     * and browsing topics directly from the user's IndexedDB history.
+     */
+    async function updateDynamicThoughtPool(days = keywordsTimeRange) {
+        try {
+            const counts = {};
+            const since = (days === 'all') ? 0 : (Date.now() - (Number(days) * 24 * 60 * 60 * 1000));
+
+            // Pull a sample of recent visits (up to 1500)
+            let collection = (since > 0)
+                ? db.visits.where('timestamp').above(since)
+                : db.visits.orderBy('timestamp').reverse();
+
+            const visits = await collection.limit(1500).toArray();
+
+            for (const v of visits) {
+                // 1. Direct search query field
+                let q = v.searchQuery;
+                // 2. Extract on the fly from URL if missing
+                if (!q && v.url) {
+                    q = extractSearchQuery(v.url);
+                }
+
+                if (q && q.trim()) {
+                    const clean = q.trim().toLowerCase();
+                    if (clean.length >= 2 && clean.length <= 26) {
+                        counts[clean] = (counts[clean] || 0) + 3;
+                    }
+                }
+
+                // 3. Domain topic (e.g. openscad.org, github.com)
+                if (v.domain && v.domain !== 'unknown' && !v.domain.includes('google.') && !v.domain.includes('bing.') && !v.domain.includes('duckduckgo.')) {
+                    const cleanDom = v.domain.replace(/^www\./, '');
+                    if (cleanDom.length >= 3 && cleanDom.length <= 24) {
+                        counts[cleanDom] = (counts[cleanDom] || 0) + 1;
+                    }
+                }
+            }
+
+            const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+            const terms = sorted.map(x => x[0]);
+
+            if (terms.length > 0) {
+                activeThoughtPool = terms;
+                topRecentSearchKeywords = terms.slice(0, 15);
+            } else {
+                activeThoughtPool = ['local history', 'indexeddb', 'privacy vault', 'offline first', 'chronos', 'analytics'];
+                topRecentSearchKeywords = activeThoughtPool;
+            }
+
+            // Stagger next swap times for the satellites so they start morphing smoothly
+            const nowSec = performance.now() * 0.001;
+            holographicThoughts.forEach((th, idx) => {
+                th.nextSwapTime = nowSec + 2.0 + idx * 2.2;
+            });
+
+            // If thought satellites haven't been spawned yet, initialize them
+            if (holographicThoughts.length === 0 && brainNodes3D.length > 0) {
+                refreshHolographicThoughts();
+            }
+
+        } catch (e) {
+            console.error('[ChronosDashboard] Error updating thought pool:', e);
+            if (activeThoughtPool.length === 0) {
+                activeThoughtPool = ['local history', 'indexeddb', 'privacy vault', 'offline first', 'chronos'];
+            }
+        }
+    }
+
+    function refreshHolographicThoughts() {
+        const pool = (activeThoughtPool && activeThoughtPool.length > 0)
+            ? activeThoughtPool
+            : ((topRecentSearchKeywords && topRecentSearchKeywords.length > 0)
+                ? topRecentSearchKeywords
+                : ['local history', 'indexeddb', 'privacy vault', 'offline first', 'chronos']);
+
+        holographicThoughts = [];
+        const count = Math.min(6, Math.max(3, pool.length));
+        const nowSec = performance.now() * 0.001;
+
+        for (let i = 0; i < count; i++) {
+            const baseAngle = (i / count) * Math.PI * 2;
+            const tetherIdx = Math.floor(Math.random() * Math.max(1, brainNodes3D.length));
+
+            const colorPalette = [
+                { color: '#38BDF8', rgb: '56, 189, 248' },
+                { color: '#A78BFA', rgb: '167, 139, 250' },
+                { color: '#34D399', rgb: '52, 211, 153' },
+                { color: '#F472B6', rgb: '244, 114, 182' },
+                { color: '#F59E0B', rgb: '245, 158, 11' }
+            ];
+            const pal = colorPalette[i % colorPalette.length];
+
+            holographicThoughts.push({
+                text: pool[i % pool.length],
+                angle: baseAngle,
+                orbitSpeed: 0.0035 + (i % 2 === 0 ? 0.0015 : -0.0015),
+                radius: 1.45 + (i % 3) * 0.12,
+                height: -0.25 + (i % 4) * 0.18,
+                color: pal.color,
+                rgb: pal.rgb,
+                tetherIdx: tetherIdx,
+                dataPackets: [
+                    { t: 0.1, speed: 0.012 },
+                    { t: 0.5, speed: 0.015 },
+                    { t: 0.8, speed: 0.010 }
+                ],
+                projX: 0,
+                projY: 0,
+                projDepth: 1,
+                boxW: 60,
+                boxH: 20,
+                opacity: 1.0,
+                fadeState: 'idle',
+                nextSwapTime: nowSec + 2.5 + i * 2.2, // Staggered initial swap intervals
+                flash: 0
+            });
+        }
+    }
+
+    // Backwards-compatible alias for keyword chart sync
+    function refreshThoughtParticles() {
+        refreshHolographicThoughts();
+    }
 
     function initCognitiveMindscape() {
         brainCanvas = document.getElementById('mind-brain-canvas');
         if (!brainCanvas) return;
         brainCtx = brainCanvas.getContext('2d');
 
-        // Spawn traveling electrical pulses
-        synapticPulses = [];
-        for (let i = 0; i < 18; i++) {
-            const conn = synapticConnections[Math.floor(Math.random() * synapticConnections.length)];
-            synapticPulses.push({
-                from: conn[0],
-                to: conn[1],
+        // Generate 3D anatomical model
+        const model = generate3DBrainModel();
+        brainNodes3D = model.nodes;
+        brainSynapses3D = model.connections;
+
+        // Initialize traveling electrical action potentials
+        actionPotentials = [];
+        const sparkCount = 38;
+        for (let i = 0; i < sparkCount; i++) {
+            if (brainSynapses3D.length === 0) break;
+            const syn = brainSynapses3D[Math.floor(Math.random() * brainSynapses3D.length)];
+            const na = brainNodes3D[syn.a];
+            actionPotentials.push({
+                from: syn.a,
+                to: syn.b,
                 t: Math.random(),
-                speed: 0.004 + Math.random() * 0.007,
-                color: Math.random() > 0.5 ? '#38BDF8' : '#A78BFA'
+                speed: 0.006 + Math.random() * 0.009,
+                color: na ? na.color : '#38BDF8',
+                rgb: na ? na.rgb : '56, 189, 248'
             });
         }
 
-        // Initialize thought particles with top search terms
-        refreshThoughtParticles();
+        initAmbientDust();
+        refreshHolographicThoughts();
 
-        // Mouse listeners
+        // Mouse & Touch Orbit Event Listeners
+        brainCanvas.addEventListener('mousedown', (e) => {
+            isDraggingCanvas = true;
+            hasUserDragged = false;
+            lastDragMouse = { x: e.clientX, y: e.clientY };
+            brainCanvas.classList.add('grabbing');
+        });
+
+        window.addEventListener('mouseup', () => {
+            if (isDraggingCanvas) {
+                isDraggingCanvas = false;
+                if (brainCanvas) brainCanvas.classList.remove('grabbing');
+            }
+        });
+
         brainCanvas.addEventListener('mousemove', (e) => {
             const rect = brainCanvas.getBoundingClientRect();
             canvasMouse.x = e.clientX - rect.left;
@@ -749,93 +1144,125 @@ document.addEventListener('DOMContentLoaded', async () => {
             const w = brainCanvas.clientWidth;
             const h = brainCanvas.clientHeight;
 
-            let found = null;
-            for (const lobe of brainLobes) {
-                const lx = lobe.nx * w;
-                const ly = lobe.ny * h;
-                const dist = Math.hypot(canvasMouse.x - lx, canvasMouse.y - ly);
-                if (dist <= lobe.radius + 12) {
-                    found = lobe;
+            if (isDraggingCanvas) {
+                hasUserDragged = true;
+                const dx = e.clientX - lastDragMouse.x;
+                const dy = e.clientY - lastDragMouse.y;
+                cameraRotation.yaw += dx * 0.009;
+                cameraRotation.pitch = Math.max(-0.65, Math.min(0.85, cameraRotation.pitch - dy * 0.009));
+                targetRotation.yaw = cameraRotation.yaw;
+                targetRotation.pitch = cameraRotation.pitch;
+                lastDragMouse = { x: e.clientX, y: e.clientY };
+            } else {
+                // Subtle responsive parallax tilt
+                targetRotation.pitch = ((canvasMouse.y / h) - 0.5) * 0.55 + 0.15;
+                targetRotation.yaw = cameraRotation.yaw + ((canvasMouse.x / w) - 0.5) * 0.7;
+            }
+
+            // Hit test thought badges first
+            let foundThought = null;
+            for (const th of holographicThoughts) {
+                const dist = Math.hypot(canvasMouse.x - th.projX, canvasMouse.y - th.projY);
+                if (dist <= 30) {
+                    foundThought = th;
                     break;
                 }
             }
-            hoveredLobe = found;
-            brainCanvas.style.cursor = found ? 'pointer' : 'default';
+            hoveredThought = foundThought;
+
+            // Hit test functional lobes
+            let foundLobe = null;
+            if (!hoveredThought) {
+                let minDist = 45;
+                for (const n of brainNodes3D) {
+                    const dist = Math.hypot(canvasMouse.x - n.projX, canvasMouse.y - n.projY);
+                    if (dist < minDist) {
+                        minDist = dist;
+                        foundLobe = n.cat;
+                    }
+                }
+            }
+            hoveredLobe = foundLobe;
+
+            if (hoveredThought || hoveredLobe) {
+                brainCanvas.style.cursor = 'pointer';
+            } else if (isDraggingCanvas) {
+                brainCanvas.style.cursor = 'grabbing';
+            } else {
+                brainCanvas.style.cursor = 'grab';
+            }
         });
 
         brainCanvas.addEventListener('mouseleave', () => {
             canvasMouse.x = -1000;
             canvasMouse.y = -1000;
             hoveredLobe = null;
+            hoveredThought = null;
         });
 
         brainCanvas.addEventListener('click', (e) => {
+            if (hasUserDragged) return; // Prevent firing filter after rotating camera
+
             const rect = brainCanvas.getBoundingClientRect();
             const cx = e.clientX - rect.left;
             const cy = e.clientY - rect.top;
-            const w = brainCanvas.clientWidth;
-            const h = brainCanvas.clientHeight;
 
-            // Check if user clicked a lobe
-            for (const lobe of brainLobes) {
-                const lx = lobe.nx * w;
-                const ly = lobe.ny * h;
-                const dist = Math.hypot(cx - lx, cy - ly);
-                if (dist <= lobe.radius + 12) {
-                    // Filter history by this category!
-                    searchInput.value = lobe.cat;
-                    btnClearSearch.classList.remove('hidden');
-                    runFilterAndQuery();
-                    return;
-                }
-            }
-
-            // Check if user clicked a thought particle
-            for (const p of thoughtParticles) {
-                const dist = Math.hypot(cx - p.x, cy - p.y);
-                if (dist <= 25) {
-                    searchInput.value = p.text;
-                    btnClearSearch.classList.remove('hidden');
-                    runFilterAndQuery();
-                    return;
-                }
-            }
-        });
-
-        // Wire HUD clicks
-        document.querySelectorAll('#mind-hud-overlay .hud-item').forEach(item => {
-            item.addEventListener('click', () => {
-                const cat = item.getAttribute('data-category');
-                if (cat) {
-                    searchInput.value = cat;
-                    btnClearSearch.classList.remove('hidden');
-                    runFilterAndQuery();
-                }
+            // Spawn radial EMP Shockwave at click point
+            neuralShockwaves.push({
+                x: cx,
+                y: cy,
+                radius: 0,
+                maxRadius: 240,
+                alpha: 1.0,
+                color: hoveredThought ? hoveredThought.color : (hoveredLobe ? '#38BDF8' : '#818CF8')
             });
+
+            // If user clicked an orbiting thought satellite:
+            if (hoveredThought) {
+                const thoughtText = (hoveredThought.text || '').trim();
+                if (thoughtText.includes('.') && !thoughtText.includes(' ')) {
+                    setDomainFilter(thoughtText);
+                } else {
+                    searchInput.value = thoughtText;
+                    btnClearSearch.classList.remove('hidden');
+                    runFilterAndQuery();
+                }
+                return;
+            }
+
+            // If user clicked a functional brain lobe:
+            if (hoveredLobe) {
+                toggleCategoryFilter(hoveredLobe);
+                return;
+            }
         });
-    }
 
-    function refreshThoughtParticles() {
-        const pool = (topRecentSearchKeywords && topRecentSearchKeywords.length > 0)
-            ? topRecentSearchKeywords
-            : ['build123d', 'fiat tris', 'google', 'archiver', 'vault'];
-
-        thoughtParticles = [];
-        const count = Math.min(7, pool.length);
-        const w = brainCanvas ? brainCanvas.clientWidth : 400;
-        const h = brainCanvas ? brainCanvas.clientHeight : 240;
-
-        for (let i = 0; i < count; i++) {
-            thoughtParticles.push({
-                text: pool[i],
-                x: 30 + Math.random() * (w - 80),
-                y: 25 + Math.random() * (h - 70),
-                vx: (Math.random() - 0.5) * 0.35,
-                vy: (Math.random() - 0.5) * 0.35,
-                phase: Math.random() * Math.PI * 2,
-                color: i % 2 === 0 ? '#C7D2FE' : '#67E8F9'
+        // Wire reset orbit button
+        const btnResetOrbit = document.getElementById('btn-reset-brain-orbit');
+        if (btnResetOrbit) {
+            btnResetOrbit.addEventListener('click', () => {
+                cameraRotation.yaw = 0;
+                cameraRotation.pitch = 0.15;
+                targetRotation.yaw = 0;
+                targetRotation.pitch = 0.15;
             });
         }
+
+        // Wire HUD items click and hover
+        document.querySelectorAll('#mind-hud-overlay .hud-item').forEach(item => {
+            const cat = item.getAttribute('data-category');
+            item.addEventListener('mouseenter', () => {
+                hoveredLobe = cat;
+            });
+            item.addEventListener('mouseleave', () => {
+                if (hoveredLobe === cat) hoveredLobe = null;
+            });
+            item.addEventListener('click', () => {
+                if (cat) {
+                    toggleCategoryFilter(cat);
+                }
+            });
+        });
     }
 
     function resizeBrainCanvas() {
@@ -867,6 +1294,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     }
 
+    /**
+     * Real-time 60FPS 3D Holographic Rendering Pipeline:
+     * Additive luminous synapses, action potential sparks, depth attenuation,
+     * brainwave oscillation, orbiting thought satellites, and telemetry callouts.
+     */
     function renderMindscapeFrame(timestamp = 0) {
         if (!isMindTabActive) return;
 
@@ -882,179 +1314,436 @@ document.addEventListener('DOMContentLoaded', async () => {
             return;
         }
 
-        brainCtx.clearRect(0, 0, w, h);
-
-        const time = timestamp * 0.001;
-
-        // 1. Draw Stylized Cybernetic Cortex Silhouette (Breathing Beziers)
-        const breathe = 1 + 0.015 * Math.sin(time * 2.2);
-        const centerX = w * 0.51;
-        const centerY = h * 0.50;
-        const scaleX = (w * 0.40) * breathe;
-        const scaleY = (h * 0.40) * breathe;
-
         brainCtx.save();
-        brainCtx.translate(centerX, centerY);
-        brainCtx.strokeStyle = 'rgba(129, 140, 248, 0.12)';
-        brainCtx.lineWidth = 1.5;
-        brainCtx.setLineDash([4, 6]);
-
-        // Outer Cranial Envelope
-        brainCtx.beginPath();
-        brainCtx.ellipse(0, 0, scaleX, scaleY, 0, 0, Math.PI * 2);
-        brainCtx.stroke();
-        brainCtx.setLineDash([]);
-
-        // Longitudinal Cerebral Fissure (Dividing the two hemispheres)
-        brainCtx.strokeStyle = 'rgba(99, 102, 241, 0.2)';
-        brainCtx.beginPath();
-        brainCtx.moveTo(0, -scaleY * 0.9);
-        brainCtx.bezierCurveTo(scaleX * 0.06, -scaleY * 0.3, -scaleX * 0.06, scaleY * 0.3, 0, scaleY * 0.9);
-        brainCtx.stroke();
+        brainCtx.setTransform(1, 0, 0, 1, 0, 0);
+        brainCtx.clearRect(0, 0, brainCanvas.width, brainCanvas.height);
         brainCtx.restore();
 
-        // 2. Draw Synaptic Arcs between connected Lobes
-        for (const [aIdx, bIdx] of synapticConnections) {
-            const a = brainLobes[aIdx];
-            const b = brainLobes[bIdx];
-            const ax = a.nx * w;
-            const ay = a.ny * h;
-            const bx = b.nx * w;
-            const by = b.ny * h;
-            const midX = (ax + bx) / 2 + Math.sin(time + aIdx) * 6;
-            const midY = (ay + by) / 2 + Math.cos(time + bIdx) * 6;
+        const time = timestamp * 0.001;
+        const centerX = w * 0.50;
+        const centerY = h * 0.48;
+
+        // Camera dynamics
+        if (!isDraggingCanvas) {
+            cameraRotation.yaw += 0.0045; // Hypnotic slow celestial drift
+            cameraRotation.pitch += (targetRotation.pitch - cameraRotation.pitch) * 0.06;
+        }
+
+        const cosY = Math.cos(cameraRotation.yaw);
+        const sinY = Math.sin(cameraRotation.yaw);
+        const cosP = Math.cos(cameraRotation.pitch);
+        const sinP = Math.sin(cameraRotation.pitch);
+
+        const fov = 340;
+        const cameraDist = 2.45;
+        const baseScale = Math.min(w, h) * 0.42;
+
+        // 1. Ambient Cosmic Dust Particles
+        for (const p of ambientDustParticles) {
+            p.x += p.vx;
+            p.y += p.vy;
+            p.z += p.vz;
+            if (p.x < -1.6) p.x = 1.6;
+            if (p.x > 1.6) p.x = -1.6;
+            if (p.y < -1.6) p.y = 1.6;
+            if (p.y > 1.6) p.y = -1.6;
+            if (p.z < -1.1) p.z = 1.1;
+            if (p.z > 1.1) p.z = -1.1;
+
+            const x1 = p.x * cosY - p.y * sinY;
+            const y1 = p.x * sinY + p.y * cosY;
+            const y2 = y1 * cosP - p.z * sinP;
+            const z2 = y1 * sinP + p.z * cosP;
+            const depth = fov / (fov + (y2 + cameraDist) * 110);
+
+            const px = centerX + x1 * baseScale * depth;
+            const py = centerY - z2 * baseScale * depth;
+
+            brainCtx.fillStyle = `rgba(167, 139, 250, ${p.alpha * depth * 0.6})`;
+            brainCtx.beginPath();
+            brainCtx.arc(px, py, p.size * depth, 0, Math.PI * 2);
+            brainCtx.fill();
+        }
+
+        // Holographic Gyroscope / Base Coordinate Rings
+        brainCtx.save();
+        brainCtx.strokeStyle = 'rgba(99, 102, 241, 0.1)';
+        brainCtx.lineWidth = 1;
+        brainCtx.setLineDash([3, 5]);
+        brainCtx.beginPath();
+        brainCtx.ellipse(centerX, centerY + baseScale * 0.72, baseScale * 0.85, baseScale * 0.22, 0, 0, Math.PI * 2);
+        brainCtx.stroke();
+        brainCtx.setLineDash([]);
+        brainCtx.restore();
+
+        // 2. Project 3D Nodes to 2D
+        const waveSpeed = cognitiveRhythmMode === 'sprint' ? 3.5 : 2.0;
+        const wavePhase = time * waveSpeed;
+
+        for (let i = 0; i < brainNodes3D.length; i++) {
+            const node = brainNodes3D[i];
+
+            // Coherent Brainwave (travelling along Y axis)
+            const brainwave = Math.sin(wavePhase - node.baseY * 3.2);
+            const waveGlow = Math.max(0, brainwave) * 0.35;
+
+            // Breathing expansion
+            const breathe = 1.0 + Math.sin(time * 2.0) * 0.015 + (node.flashIntensity * 0.08);
+
+            const nx = node.baseX * breathe;
+            const ny = node.baseY * breathe;
+            const nz = node.baseZ * breathe;
+
+            // 3D Yaw Rotation
+            const x1 = nx * cosY - ny * sinY;
+            const y1 = nx * sinY + ny * cosY;
+            const z1 = nz;
+
+            // 3D Pitch Rotation
+            const y2 = y1 * cosP - z1 * sinP;
+            const z2 = y1 * sinP + z1 * cosP;
+            const x2 = x1;
+
+            // Perspective projection
+            const depth = fov / (fov + (y2 + cameraDist) * 110);
+            node.projX = centerX + x2 * baseScale * depth;
+            node.projY = centerY - z2 * baseScale * depth;
+            node.projDepth = depth;
+            node.depthZ = y2;
+            node.waveGlow = waveGlow;
+        }
+
+        // 3. Render Synaptic Filament Plexus (Additive Glowing Fibers)
+        brainCtx.save();
+        brainCtx.globalCompositeOperation = 'lighter'; // Additive blending for luminous bloom
+
+        for (let i = 0; i < brainSynapses3D.length; i++) {
+            const syn = brainSynapses3D[i];
+            const na = brainNodes3D[syn.a];
+            const nb = brainNodes3D[syn.b];
+
+            const avgDepth = (na.projDepth + nb.projDepth) * 0.5;
+            let alpha = (1.0 - syn.dist / 0.235) * 0.32 * avgDepth;
+
+            const isHighlighted = hoveredLobe && (na.cat === hoveredLobe || nb.cat === hoveredLobe);
+            if (isHighlighted) {
+                alpha *= 2.5;
+            }
+
+            if (alpha <= 0.015) continue;
 
             brainCtx.beginPath();
-            brainCtx.moveTo(ax, ay);
-            brainCtx.quadraticCurveTo(midX, midY, bx, by);
-            brainCtx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
-            brainCtx.lineWidth = 1;
+            brainCtx.moveTo(na.projX, na.projY);
+            brainCtx.lineTo(nb.projX, nb.projY);
+            brainCtx.strokeStyle = `rgba(${na.rgb}, ${Math.min(1, alpha)})`;
+            brainCtx.lineWidth = (isHighlighted ? 1.4 : 0.8) * avgDepth;
             brainCtx.stroke();
         }
 
-        // 3. Draw Synaptic Traveling Sparks (Electrical Impulses)
-        for (const pulse of synapticPulses) {
-            pulse.t += pulse.speed;
-            if (pulse.t >= 1) {
-                pulse.t = 0;
-                const newConn = synapticConnections[Math.floor(Math.random() * synapticConnections.length)];
-                pulse.from = newConn[0];
-                pulse.to = newConn[1];
+        // 4. Render Action Potential Sparks (Electric Impulses)
+        const pulseSpeedMult = cognitiveRhythmMode === 'sprint' ? 1.5 : (cognitiveRhythmMode === 'dip' ? 0.7 : 1.0);
+
+        for (const spark of actionPotentials) {
+            spark.t += spark.speed * pulseSpeedMult;
+            if (spark.t >= 1) {
+                spark.t = 0;
+                const destNode = brainNodes3D[spark.to];
+                if (destNode) {
+                    destNode.flashIntensity = 1.0;
+                    // Branch into next synapse
+                    if (destNode.connections.length > 0 && Math.random() < 0.7) {
+                        spark.from = spark.to;
+                        spark.to = destNode.connections[Math.floor(Math.random() * destNode.connections.length)];
+                    } else {
+                        const randomSyn = brainSynapses3D[Math.floor(Math.random() * brainSynapses3D.length)];
+                        spark.from = randomSyn.a;
+                        spark.to = randomSyn.b;
+                    }
+                }
             }
 
-            const a = brainLobes[pulse.from];
-            const b = brainLobes[pulse.to];
-            const ax = a.nx * w;
-            const ay = a.ny * h;
-            const bx = b.nx * w;
-            const by = b.ny * h;
-            const midX = (ax + bx) / 2;
-            const midY = (ay + by) / 2;
+            const na = brainNodes3D[spark.from];
+            const nb = brainNodes3D[spark.to];
+            if (!na || !nb) continue;
 
-            // Quadratic Bezier interpolation
-            const t = pulse.t;
-            const px = (1 - t) * (1 - t) * ax + 2 * (1 - t) * t * midX + t * t * bx;
-            const py = (1 - t) * (1 - t) * ay + 2 * (1 - t) * t * midY + t * t * by;
+            const t = spark.t;
+            const sx = na.projX + (nb.projX - na.projX) * t;
+            const sy = na.projY + (nb.projY - na.projY) * t;
+            const avgDepth = (na.projDepth + nb.projDepth) * 0.5;
+
+            // Glowing Comet Head
+            brainCtx.fillStyle = '#FFFFFF';
+            brainCtx.beginPath();
+            brainCtx.arc(sx, sy, 2.0 * avgDepth, 0, Math.PI * 2);
+            brainCtx.fill();
+
+            // Glowing Halo
+            brainCtx.fillStyle = `rgba(${na.rgb}, ${0.8 * avgDepth})`;
+            brainCtx.beginPath();
+            brainCtx.arc(sx, sy, 5.0 * avgDepth, 0, Math.PI * 2);
+            brainCtx.fill();
+        }
+
+        // 5. Render Brain Nodes (Synaptic Neurons)
+        for (let i = 0; i < brainNodes3D.length; i++) {
+            const n = brainNodes3D[i];
+            const isLobeHovered = hoveredLobe && n.cat === hoveredLobe;
+
+            const baseR = (n.type === 'stem' ? 1.5 : (n.type === 'cerebellum' ? 1.7 : 2.1));
+            const rad = baseR * n.projDepth * (1 + n.flashIntensity * 1.6 + (isLobeHovered ? 0.9 : 0));
+
+            // Radial Aura Glow
+            const auraRad = rad * 4.5;
+            const auraAlpha = (0.28 + n.flashIntensity * 0.55 + n.waveGlow + (isLobeHovered ? 0.45 : 0)) * n.projDepth;
+
+            const grad = brainCtx.createRadialGradient(n.projX, n.projY, 1, n.projX, n.projY, auraRad);
+            grad.addColorStop(0, `rgba(${n.rgb}, ${Math.min(1, auraAlpha)})`);
+            grad.addColorStop(1, `rgba(${n.rgb}, 0)`);
+            brainCtx.fillStyle = grad;
+            brainCtx.beginPath();
+            brainCtx.arc(n.projX, n.projY, auraRad, 0, Math.PI * 2);
+            brainCtx.fill();
+
+            // Core Hotspot
+            brainCtx.fillStyle = (n.flashIntensity > 0.4) ? '#FFFFFF' : n.color;
+            brainCtx.beginPath();
+            brainCtx.arc(n.projX, n.projY, rad, 0, Math.PI * 2);
+            brainCtx.fill();
+
+            // Decay flash
+            if (n.flashIntensity > 0) {
+                n.flashIntensity = Math.max(0, n.flashIntensity - 0.045);
+            }
+        }
+
+        brainCtx.restore(); // Exit lighter mode for crisp text & badges
+
+        // 6. Render Radial Shockwaves (Click EMP Lightning Burst)
+        for (let i = neuralShockwaves.length - 1; i >= 0; i--) {
+            const sw = neuralShockwaves[i];
+            sw.radius += 8;
+            sw.alpha -= 0.038;
+
+            if (sw.alpha <= 0 || sw.radius >= sw.maxRadius) {
+                neuralShockwaves.splice(i, 1);
+                continue;
+            }
+
+            // Excite nodes passing the shockwave
+            for (const n of brainNodes3D) {
+                const dist = Math.hypot(n.projX - sw.x, n.projY - sw.y);
+                if (Math.abs(dist - sw.radius) < 14) {
+                    n.flashIntensity = Math.max(n.flashIntensity, 0.9);
+                }
+            }
 
             brainCtx.save();
-            brainCtx.fillStyle = pulse.color;
-            brainCtx.shadowColor = pulse.color;
-            brainCtx.shadowBlur = 8;
+            brainCtx.strokeStyle = sw.color;
+            brainCtx.lineWidth = 2.0 * sw.alpha;
+            brainCtx.globalAlpha = sw.alpha;
+            brainCtx.shadowColor = sw.color;
+            brainCtx.shadowBlur = 14;
             brainCtx.beginPath();
-            brainCtx.arc(px, py, 2.2, 0, Math.PI * 2);
-            brainCtx.fill();
+            brainCtx.arc(sw.x, sw.y, sw.radius, 0, Math.PI * 2);
+            brainCtx.stroke();
             brainCtx.restore();
         }
 
-        // 4. Draw Brain Lobes (Functional Energy Zones)
-        for (const lobe of brainLobes) {
-            const lx = lobe.nx * w;
-            const ly = lobe.ny * h;
-            const isHovered = hoveredLobe === lobe;
-            const baseRad = lobe.radius * (0.85 + lobe.intensity * 0.4);
-            const pulseRad = baseRad + Math.sin(time * 3 + lobe.nx * 10) * 2;
+        // 7. Render Orbiting Holographic Thought Satellites (Search Ingestion Streams)
+        for (const th of holographicThoughts) {
+            th.angle += th.orbitSpeed;
 
-            // Outer Radial Aura Glow
-            const glow = brainCtx.createRadialGradient(lx, ly, 2, lx, ly, pulseRad * 1.8);
-            glow.addColorStop(0, `rgba(${lobe.rgb}, ${0.35 + lobe.intensity * 0.3})`);
-            glow.addColorStop(1, `rgba(${lobe.rgb}, 0)`);
-            brainCtx.fillStyle = glow;
-            brainCtx.beginPath();
-            brainCtx.arc(lx, ly, pulseRad * 1.8, 0, Math.PI * 2);
-            brainCtx.fill();
+            // Dynamic thought cycling across consciousness
+            if (th.fadeState === 'idle') {
+                if (time >= th.nextSwapTime && activeThoughtPool.length > 1) {
+                    th.fadeState = 'fading_out';
+                }
+            } else if (th.fadeState === 'fading_out') {
+                th.opacity -= 0.045; // Smooth fade out
+                if (th.opacity <= 0) {
+                    th.opacity = 0;
 
-            // Core Energy Circle
-            brainCtx.fillStyle = lobe.color;
-            brainCtx.beginPath();
-            brainCtx.arc(lx, ly, pulseRad * 0.6, 0, Math.PI * 2);
-            brainCtx.fill();
+                    // Pick next thought from activeThoughtPool
+                    thoughtPoolCursor = (thoughtPoolCursor + 1) % activeThoughtPool.length;
+                    let nextTerm = activeThoughtPool[thoughtPoolCursor];
 
-            // Inner Core Hotspot
-            brainCtx.fillStyle = '#FFFFFF';
-            brainCtx.beginPath();
-            brainCtx.arc(lx, ly, 2.5, 0, Math.PI * 2);
-            brainCtx.fill();
+                    // Ensure not duplicating an already visible satellite
+                    const currentlyShown = holographicThoughts.map(x => x.text);
+                    if (currentlyShown.includes(nextTerm) && activeThoughtPool.length > 6) {
+                        thoughtPoolCursor = (thoughtPoolCursor + 1) % activeThoughtPool.length;
+                        nextTerm = activeThoughtPool[thoughtPoolCursor];
+                    }
 
-            // Hover Neon Aura
-            if (isHovered) {
-                brainCtx.save();
-                brainCtx.strokeStyle = '#FFFFFF';
-                brainCtx.shadowColor = lobe.color;
-                brainCtx.shadowBlur = 12;
-                brainCtx.lineWidth = 1.5;
-                brainCtx.beginPath();
-                brainCtx.arc(lx, ly, pulseRad + 6, 0, Math.PI * 2);
-                brainCtx.stroke();
-                brainCtx.restore();
+                    th.text = nextTerm;
+
+                    // Re-tether to a random cortex node
+                    th.tetherIdx = Math.floor(Math.random() * Math.max(1, brainNodes3D.length));
+
+                    // Cycle colors dynamically
+                    const colorChoices = [
+                        { color: '#38BDF8', rgb: '56, 189, 248' },
+                        { color: '#A78BFA', rgb: '167, 139, 250' },
+                        { color: '#34D399', rgb: '52, 211, 153' },
+                        { color: '#F472B6', rgb: '244, 114, 182' },
+                        { color: '#F59E0B', rgb: '245, 158, 11' }
+                    ];
+                    const chosen = colorChoices[Math.floor(Math.random() * colorChoices.length)];
+                    th.color = chosen.color;
+                    th.rgb = chosen.rgb;
+
+                    th.fadeState = 'fading_in';
+                }
+            } else if (th.fadeState === 'fading_in') {
+                th.opacity += 0.045;
+                if (th.opacity >= 1.0) {
+                    th.opacity = 1.0;
+                    th.fadeState = 'idle';
+                    th.flash = 1.0; // Emergence bloom
+                    th.nextSwapTime = time + 7.0 + Math.random() * 5.0; // Stay visible for 7-12 seconds
+
+                    // Excite tether node in the cortex
+                    const tn = brainNodes3D[th.tetherIdx];
+                    if (tn) tn.flashIntensity = 1.0;
+                }
             }
 
-            // Lobe Label & Category
-            brainCtx.font = '600 9px Inter, system-ui, sans-serif';
-            brainCtx.fillStyle = isHovered ? '#FFFFFF' : 'rgba(241, 245, 249, 0.85)';
-            brainCtx.textAlign = 'center';
-            brainCtx.fillText(lobe.cat, lx, ly + pulseRad + 13);
-        }
+            if (th.flash > 0) {
+                th.flash = Math.max(0, th.flash - 0.04);
+            }
 
-        // 5. Draw Floating Thought Impulses (Search Keywords drifting through consciousness)
-        for (const p of thoughtParticles) {
-            p.x += p.vx;
-            p.y += p.vy;
+            const ox = Math.cos(th.angle) * th.radius;
+            const oy = Math.sin(th.angle) * th.radius;
+            const oz = th.height + Math.sin(th.angle * 2) * 0.15;
 
-            // Wrap around boundaries
-            if (p.x < 15) p.x = w - 25;
-            if (p.x > w - 20) p.x = 20;
-            if (p.y < 20) p.y = h - 50;
-            if (p.y > h - 45) p.y = 25;
+            // Rotate with camera
+            const x1 = ox * cosY - oy * sinY;
+            const y1 = ox * sinY + oy * cosY;
+            const z1 = oz;
 
-            const floatY = p.y + Math.sin(time * 1.5 + p.phase) * 3;
+            const y2 = y1 * cosP - z1 * sinP;
+            const z2 = y1 * sinP + z1 * cosP;
+            const x2 = x1;
 
-            // Pill box dimensions
-            brainCtx.font = '500 8.5px Inter, system-ui, monospace';
-            const textWidth = brainCtx.measureText(p.text).width;
-            const boxW = textWidth + 14;
-            const boxH = 16;
-            const boxX = p.x - boxW / 2;
-            const boxY = floatY - boxH / 2;
+            const depth = fov / (fov + (y2 + cameraDist) * 110);
+            th.projX = centerX + x2 * baseScale * depth;
+            th.projY = centerY - z2 * baseScale * depth;
+            th.projDepth = depth;
 
-            // Pill background
-            brainCtx.fillStyle = 'rgba(15, 23, 42, 0.72)';
-            brainCtx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
-            brainCtx.lineWidth = 1;
+            // Connect to tether node in cortex
+            const tetherNode = brainNodes3D[th.tetherIdx] || brainNodes3D[0];
+            const isHovered = hoveredThought === th;
+            const effectiveAlpha = th.opacity * depth;
+
+            if (effectiveAlpha <= 0.01) continue;
+
+            // Draw Curved Energy Filament (Tether spline)
+            const midX = (th.projX + tetherNode.projX) * 0.5;
+            const midY = (th.projY + tetherNode.projY) * 0.5 - 18 * depth;
+
+            brainCtx.save();
             brainCtx.beginPath();
-            brainCtx.roundRect(boxX, boxY, boxW, boxH, 8);
-            brainCtx.fill();
+            brainCtx.moveTo(th.projX, th.projY);
+            brainCtx.quadraticCurveTo(midX, midY, tetherNode.projX, tetherNode.projY);
+            brainCtx.strokeStyle = isHovered ? '#FFFFFF' : `rgba(${th.rgb}, ${0.28 * effectiveAlpha})`;
+            brainCtx.lineWidth = (isHovered ? 1.6 : 0.9) * th.opacity;
             brainCtx.stroke();
 
-            // Tiny dot indicator
-            brainCtx.fillStyle = p.color;
+            // Stream Ingestion Data Particles along tether into the brain!
+            for (const dp of th.dataPackets) {
+                dp.t += dp.speed;
+                if (dp.t >= 1) dp.t = 0;
+
+                const t = dp.t;
+                const px = (1 - t) * (1 - t) * th.projX + 2 * (1 - t) * t * midX + t * t * tetherNode.projX;
+                const py = (1 - t) * (1 - t) * th.projY + 2 * (1 - t) * t * midY + t * t * tetherNode.projY;
+
+                brainCtx.fillStyle = isHovered ? '#FFFFFF' : th.color;
+                brainCtx.globalAlpha = effectiveAlpha;
+                brainCtx.beginPath();
+                brainCtx.arc(px, py, 1.8 * depth, 0, Math.PI * 2);
+                brainCtx.fill();
+            }
+
+            // Draw Holographic Thought Badge
+            brainCtx.font = '600 9px Inter, system-ui, sans-serif';
+            const textW = brainCtx.measureText(th.text).width;
+            const boxW = textW + 18;
+            const boxH = 18;
+            const boxX = th.projX - boxW / 2;
+            const boxY = th.projY - boxH / 2;
+            th.boxW = boxW;
+            th.boxH = boxH;
+
+            // Glassmorphic background
+            brainCtx.globalAlpha = effectiveAlpha;
+            brainCtx.fillStyle = isHovered ? 'rgba(30, 41, 59, 0.95)' : 'rgba(10, 15, 29, 0.78)';
+            brainCtx.strokeStyle = isHovered ? '#FFFFFF' : `rgba(${th.rgb}, ${0.5 * effectiveAlpha})`;
+            brainCtx.lineWidth = isHovered ? 1.5 : 1;
+            if (isHovered || th.flash > 0) {
+                brainCtx.shadowColor = th.color;
+                brainCtx.shadowBlur = isHovered ? 14 : (th.flash * 16);
+            }
             brainCtx.beginPath();
-            brainCtx.arc(boxX + 6, floatY, 2, 0, Math.PI * 2);
+            brainCtx.roundRect(boxX, boxY, boxW, boxH, 9);
+            brainCtx.fill();
+            brainCtx.stroke();
+            brainCtx.shadowBlur = 0;
+
+            // Neon accent dot
+            brainCtx.fillStyle = th.color;
+            brainCtx.beginPath();
+            brainCtx.arc(boxX + 7, th.projY, 2.5, 0, Math.PI * 2);
             brainCtx.fill();
 
             // Text
-            brainCtx.fillStyle = '#E2E8F0';
+            brainCtx.fillStyle = isHovered ? '#FFFFFF' : '#E2E8F0';
             brainCtx.textAlign = 'left';
-            brainCtx.fillText(p.text, boxX + 11, floatY + 3);
+            brainCtx.fillText(th.text, boxX + 13, th.projY + 3.2);
+
+            brainCtx.restore();
+        }
+
+        // 8. Hover Telemetry HUD Callout
+        if (hoveredLobe && !hoveredThought) {
+            let sumX = 0, sumY = 0, count = 0;
+            let lobeColor = '#38BDF8';
+            for (const n of brainNodes3D) {
+                if (n.cat === hoveredLobe) {
+                    sumX += n.projX;
+                    sumY += n.projY;
+                    count++;
+                    lobeColor = n.color;
+                }
+            }
+            if (count > 0) {
+                const cx = sumX / count;
+                const cy = sumY / count;
+                const pct = Math.round((cognitiveActivityDistribution[hoveredLobe] || 0) * 100);
+
+                brainCtx.save();
+                brainCtx.font = '700 9.5px Inter, system-ui, sans-serif';
+                const labelText = `⚡ ${hoveredLobe.toUpperCase()} (${pct}%)`;
+                const lw = brainCtx.measureText(labelText).width;
+
+                const lx = Math.max(10, Math.min(w - lw - 24, cx - lw / 2));
+                const ly = Math.max(30, cy - 35);
+
+                brainCtx.fillStyle = 'rgba(15, 23, 42, 0.9)';
+                brainCtx.strokeStyle = lobeColor;
+                brainCtx.lineWidth = 1.2;
+                brainCtx.shadowColor = lobeColor;
+                brainCtx.shadowBlur = 10;
+                brainCtx.beginPath();
+                brainCtx.roundRect(lx, ly, lw + 16, 20, 6);
+                brainCtx.fill();
+                brainCtx.stroke();
+
+                brainCtx.shadowBlur = 0;
+                brainCtx.fillStyle = '#FFFFFF';
+                brainCtx.textAlign = 'left';
+                brainCtx.fillText(labelText, lx + 8, ly + 13.5);
+                brainCtx.restore();
+            }
         }
 
         mindscapeAnimFrameId = requestAnimationFrame(renderMindscapeFrame);
@@ -1348,6 +2037,40 @@ document.addEventListener('DOMContentLoaded', async () => {
             } else if (activeDomainFilter) {
                 // If domain filter is active but no keywords, query by domain using compound index or domain index
                 collection = db.visits.where('domain').equals(activeDomainFilter);
+            } else if (activeCategoryFilter && searchWords.length === 0 && !activeDomainFilter) {
+                // High-performance streaming filter directly on timestamp index
+                let col = null;
+                if (startDateFilter && endDateFilter) {
+                    col = db.visits.where('timestamp').between(startDateFilter, endDateFilter, true, true);
+                } else if (startDateFilter) {
+                    col = db.visits.where('timestamp').aboveOrEqual(startDateFilter);
+                } else if (endDateFilter) {
+                    col = db.visits.where('timestamp').belowOrEqual(endDateFilter);
+                } else {
+                    col = db.visits.orderBy('timestamp');
+                }
+
+                if (sortOrder === 'desc') {
+                    col = col.reverse();
+                }
+
+                matchedIds = await col.filter(r => {
+                    if (getCategory(r.domain) !== activeCategoryFilter) return false;
+                    if (activeDayOfWeekFilter !== null && activeHourOfDayFilter !== null) {
+                        const d = new Date(r.timestamp);
+                        const day = d.getDay();
+                        const adjustedDay = day === 0 ? 6 : day - 1;
+                        const hour = d.getHours();
+                        return adjustedDay === activeDayOfWeekFilter && hour === activeHourOfDayFilter;
+                    }
+                    return true;
+                }).limit(30000).primaryKeys();
+
+                // Update filter chip UI
+                updateFilterChips();
+                await renderDrilldownPanel();
+                resetVirtualScroll();
+                return;
             } else {
                 // Fetch all visits ordered chronologically using timestamp index
                 collection = db.visits.orderBy('timestamp');
@@ -1362,7 +2085,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             // 3. In-Memory Filter Refinements (for sub-attributes)
             // If we used a keyword prefix matching, we must resolve remaining keywords, sorting and secondary filters
-            if (searchWords.length > 0 || activeDomainFilter || startDateFilter || endDateFilter || activeDayOfWeekFilter !== null || activeHourOfDayFilter !== null) {
+            if (searchWords.length > 0 || activeDomainFilter || activeCategoryFilter || startDateFilter || endDateFilter || activeDayOfWeekFilter !== null || activeHourOfDayFilter !== null) {
                 // Fetch only minimal object data (id, timestamp, title, url, domain) using bulkGet for speed
                 const targetKeys = keys.slice(0, 30000);
                 let records = typeof db.visits.bulkGet === 'function'
@@ -1386,6 +2109,11 @@ document.addEventListener('DOMContentLoaded', async () => {
                 // Domain Filter
                 if (activeDomainFilter && searchWords.length > 0) {
                     records = records.filter(r => r.domain === activeDomainFilter);
+                }
+
+                // Category Filter (when combined with keywords or domain filter)
+                if (activeCategoryFilter) {
+                    records = records.filter(r => getCategory(r.domain) === activeCategoryFilter);
                 }
 
                 // Date Filters
@@ -1551,12 +2279,46 @@ document.addEventListener('DOMContentLoaded', async () => {
         runFilterAndQuery();
     }
 
+    function setCategoryFilter(category) {
+        activeCategoryFilter = category;
+        updateHudCategoryHighlight();
+        runFilterAndQuery();
+    }
+
+    function toggleCategoryFilter(category) {
+        activeCategoryFilter = (activeCategoryFilter === category) ? null : category;
+        updateHudCategoryHighlight();
+        runFilterAndQuery();
+    }
+
+    function removeCategoryFilter() {
+        activeCategoryFilter = null;
+        updateHudCategoryHighlight();
+        runFilterAndQuery();
+    }
+
+    function updateHudCategoryHighlight() {
+        document.querySelectorAll('#mind-hud-overlay .hud-item').forEach(el => {
+            const cat = el.getAttribute('data-category');
+            if (activeCategoryFilter && cat === activeCategoryFilter) {
+                el.classList.add('active');
+            } else {
+                el.classList.remove('active');
+            }
+        });
+    }
+
     function updateFilterChips() {
         chipsList.innerHTML = '';
         let hasActiveFilters = false;
 
         if (activeDomainFilter) {
             createChip(`Domain: ${activeDomainFilter}`, removeDomainFilter);
+            hasActiveFilters = true;
+        }
+
+        if (activeCategoryFilter) {
+            createChip(`Category: ${activeCategoryFilter}`, removeCategoryFilter);
             hasActiveFilters = true;
         }
 
@@ -1762,8 +2524,10 @@ document.addEventListener('DOMContentLoaded', async () => {
             startDateFilter = null;
             endDateFilter = null;
             activeDomainFilter = null;
+            activeCategoryFilter = null;
             activeDayOfWeekFilter = null;
             activeHourOfDayFilter = null;
+            updateHudCategoryHighlight();
             
             // Clear active cell highlights
             if (heatmapGridContainer) {
