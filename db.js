@@ -7,13 +7,18 @@
 
 const db = new Dexie('LocalHistoryDB');
 
-// Declare schema (Version 1 & Version 2 for seamless migrations)
+// Declare schema (Version 1, 2, and 3 for seamless migrations)
 db.version(1).stores({
     visits: '++id, url, domain, timestamp, title, *keywords, [timestamp+domain], [url+timestamp]'
 });
 
 db.version(2).stores({
     visits: '++id, url, domain, timestamp, title, searchQuery, *keywords, [timestamp+domain], [url+timestamp]'
+});
+
+db.version(3).stores({
+    visits: '++id, url, domain, timestamp, title, searchQuery, *keywords, [timestamp+domain], [url+timestamp]',
+    meta: 'key'
 });
 
 /**
@@ -60,8 +65,8 @@ function extractSearchQuery(urlStr) {
 }
 
 /**
- * Extracts a unique set of lowercase alphanumeric keywords from a title and URL.
- * Used for building the multi-entry index (*keywords) for high-performance keyword search.
+ * Extracts a unique set of lowercase alphanumeric and multilingual Unicode keywords.
+ * Supports Latin, Chinese, Arabic, Cyrillic, and international scripts with CJK sub-grams.
  * @param {string} title 
  * @param {string} url 
  * @returns {string[]}
@@ -72,12 +77,25 @@ function extractKeywords(title, url) {
     // Normalize and combine title and URL
     const combined = ((title || '') + ' ' + (url || '')).toLowerCase();
     
-    // Split by non-alphanumeric characters
-    const words = combined.split(/[^a-z0-9]+/);
+    // Match any continuous sequence of Unicode letters or numbers
+    const words = combined.match(/[\p{L}\p{N}]+/ug) || [];
     for (const word of words) {
-        // Index words that are at least 2 characters to keep the index reasonably sized
         if (word.length >= 2) {
             tokens.add(word);
+        }
+
+        // For CJK (Chinese, Japanese, Korean) ideographic characters,
+        // words are not space-separated. Index bi-grams and characters so searches match:
+        const hasCjk = /[\u4e00-\u9fff\u3400-\u4dbf\uf900-\ufaff]/u.test(word);
+        if (hasCjk) {
+            // Index 2-character sub-grams for Chinese/Japanese text
+            for (let i = 0; i < word.length - 1; i++) {
+                tokens.add(word.slice(i, i + 2));
+            }
+            // Also index individual CJK characters
+            for (let i = 0; i < word.length; i++) {
+                tokens.add(word[i]);
+            }
         }
     }
     return Array.from(tokens);
@@ -91,6 +109,9 @@ function extractKeywords(title, url) {
 function getDomain(urlStr) {
     try {
         const url = new URL(urlStr);
+        if (!url.hostname) {
+            return url.protocol ? url.protocol.replace(':', '') : 'unknown';
+        }
         return url.hostname.replace(/^www\./, '');
     } catch (e) {
         return 'unknown';

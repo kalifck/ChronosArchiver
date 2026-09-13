@@ -26,15 +26,24 @@ self.onmessage = async function(event) {
         // Step callback is executed row-by-row
         step: function(results, parser) {
             const row = results.data;
+            if (!row || typeof row !== 'object') return;
             
-            // Basic validation - check if URL exists
-            if (row.url) {
-                // Ensure timestamp is parsed properly. 
-                // Handles standard Unix timestamp formats (s or ms)
-                let timestamp = Number(row.timestamp);
-                if (isNaN(timestamp)) {
-                    // Try parsing as ISO string
-                    const dateParsed = Date.parse(row.timestamp);
+            // Normalize header names to lowercase and trim spaces for maximum tool compatibility
+            const norm = {};
+            for (const key of Object.keys(row)) {
+                if (key) norm[key.trim().toLowerCase()] = row[key];
+            }
+
+            const rawUrl = norm.url || norm.link || norm.href || norm.address || '';
+            const rawTitle = norm.title || norm.name || norm.subject || rawUrl;
+            const rawTime = norm.timestamp || norm.time || norm.date || norm.timestamp_iso || norm.lastvisittime;
+
+            // Basic validation - check if URL exists and is a valid web URL
+            if (rawUrl && (rawUrl.startsWith('http://') || rawUrl.startsWith('https://'))) {
+                let timestamp = Number(rawTime);
+                if (isNaN(timestamp) || !rawTime) {
+                    // Try parsing as ISO or date string
+                    const dateParsed = Date.parse(rawTime);
                     timestamp = isNaN(dateParsed) ? Date.now() : dateParsed;
                 } else if (timestamp < 100000000000) {
                     // If Unix timestamp is in seconds, convert to milliseconds
@@ -42,8 +51,8 @@ self.onmessage = async function(event) {
                 }
 
                 batch.push({
-                    url: row.url,
-                    title: row.title || row.url,
+                    url: rawUrl,
+                    title: rawTitle || rawUrl,
                     timestamp: timestamp
                 });
 

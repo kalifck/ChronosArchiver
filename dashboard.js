@@ -60,8 +60,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     let sortOrder = 'desc'; // 'desc' (newest) or 'asc' (oldest)
     
     // Interactive Heatmap Filters
-    let activeDayOfWeekFilter = null; // 0-6 (Sun-Sat) or null
+    let activeDayOfWeekFilter = null; // 0-6 (Mon-Sun) or null
     let activeHourOfDayFilter = null; // 0-23 or null
+
+    // Cached lightweight metrics for zero-deserialization insights
+    let lastComputedHeatmap = null;
+    let lastDomainCounts = null;
+    let renderTicket = 0; // Guard against out-of-order async render frames
 
     // Chart.js instances
     let chartDomains = null;
@@ -197,8 +202,12 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         // Fast index-only cursor traversal (only loads string keys into memory, not rows)
         await db.visits.orderBy('domain').eachKey(domain => {
-            domainCounts[domain] = (domainCounts[domain] || 0) + 1;
+            if (domain && domain !== 'unknown') {
+                domainCounts[domain] = (domainCounts[domain] || 0) + 1;
+            }
         });
+
+        lastDomainCounts = domainCounts;
 
         // Sort domains by visit count
         const sortedDomains = Object.entries(domainCounts)
@@ -544,6 +553,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                 heatmap[adjustedDay][hour]++;
             });
 
+            lastComputedHeatmap = heatmap;
+
             // Find maximum hourly value to establish visual color thresholds
             let maxVal = 0;
             for (let d = 0; d < 7; d++) {
@@ -616,40 +627,29 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     /**
-     * Aggregates database history metrics in a single pass.
+     * Aggregates database history metrics with zero object deserialization.
+     * Computes metrics in O(1) from heatmap cache, domain index counts, and search index queries.
      */
     async function updateInsights() {
         try {
             const total = await db.visits.count();
             if (total === 0) return;
 
+            // 1. Derive hourly and daily peak metrics from the heatmap grid (zero row deserialization)
             const hourlyCounts = Array(24).fill(0);
             const dailyCounts = Array(7).fill(0);
-            let searchCount = 0;
 
-            const categoryCounts = {
-                'Tech & Learning': 0,
-                'Entertainment': 0,
-                'Social & Forums': 0,
-                'Shopping': 0,
-                'Search Engines': 0
-            };
-
-            // Single cursor pass over database items (low memory deserialization)
-            await db.visits.each(item => {
-                const date = new Date(item.timestamp);
-                hourlyCounts[date.getHours()]++;
-                dailyCounts[date.getDay()]++;
-                
-                if (item.searchQuery) searchCount++;
-
-                const cat = getCategory(item.domain);
-                if (categoryCounts[cat] !== undefined) {
-                    categoryCounts[cat]++;
+            if (lastComputedHeatmap) {
+                for (let d = 0; d < 7; d++) {
+                    for (let h = 0; h < 24; h++) {
+                        const count = lastComputedHeatmap[d][h];
+                        hourlyCounts[h] += count;
+                        dailyCounts[d] += count;
+                    }
                 }
-            });
+            }
 
-            // 1. Calculate Peak Hour
+            // Calculate Peak Hour
             let peakHour = 0;
             let peakHourVal = 0;
             for (let i = 0; i < 24; i++) {
@@ -661,8 +661,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             const peakHourStr = peakHour === 0 ? '12 AM' : peakHour === 12 ? '12 PM' : peakHour > 12 ? `${peakHour - 12} PM` : `${peakHour} AM`;
             insightPeakTime.textContent = `${peakHourStr} (${peakHourVal.toLocaleString()} visits)`;
 
-            // 2. Calculate Peak Day
-            const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+            // Calculate Peak Day (0=Mon, 1=Tue, ... 6=Sun)
+            const dayNamesMonFirst = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
             let peakDay = 0;
             let peakDayVal = 0;
             for (let i = 0; i < 7; i++) {
@@ -671,15 +671,27 @@ document.addEventListener('DOMContentLoaded', async () => {
                     peakDay = i;
                 }
             }
-            insightActiveDay.textContent = `${dayNames[peakDay]} (${peakDayVal.toLocaleString()} visits)`;
+            insightActiveDay.textContent = `${dayNamesMonFirst[peakDay]} (${peakDayVal.toLocaleString()} visits)`;
 
-            // 3. Search Ratio
+            // 2. Search Ratio using fast index-only count (never loads rows into memory)
+            const searchCount = await db.visits.where('searchQuery').above('').count();
             const searchRatio = ((searchCount / total) * 100).toFixed(1);
             insightSearchVelocity.textContent = `${searchRatio}% (${searchCount.toLocaleString()} queries)`;
 
-            // 4. Focus Category
-            const topCategory = Object.entries(categoryCounts).sort((a, b) => b[1] - a[1])[0][0];
-            insightFocusCategory.textContent = topCategory;
+            // 3. Focus Category derived from top domain counts
+            if (lastDomainCounts && Object.keys(lastDomainCounts).length > 0) {
+                const categorySums = {};
+                for (const [dom, cnt] of Object.entries(lastDomainCounts)) {
+                    const cat = getCategory(dom);
+                    categorySums[cat] = (categorySums[cat] || 0) + cnt;
+                }
+                const sortedCategories = Object.entries(categorySums).sort((a, b) => b[1] - a[1]);
+                if (sortedCategories.length > 0) {
+                    insightFocusCategory.textContent = sortedCategories[0][0];
+                }
+            } else {
+                insightFocusCategory.textContent = 'Tech & Learning';
+            }
 
         } catch (e) {
             console.error('[ChronosDashboard] Error loading insights:', e);
@@ -796,16 +808,17 @@ document.addEventListener('DOMContentLoaded', async () => {
      */
     async function runFilterAndQuery() {
         try {
-            // Parse keyword search input
+            // Parse keyword search input with multilingual Unicode support
             const searchVal = searchInput.value.trim().toLowerCase();
-            const searchWords = searchVal ? searchVal.split(/\s+/).filter(w => w.length >= 2) : [];
+            const searchWords = searchVal ? (searchVal.match(/[\p{L}\p{N}]+/ug) || []) : [];
             
             let collection = null;
 
             // 1. Primary Ingestion Strategy
             if (searchWords.length > 0) {
                 // If keywords exist, load matching key records using the multi-entry (*keywords) prefix index
-                collection = db.visits.where('keywords').startsWith(searchWords[0]);
+                // Note: .distinct() is crucial for multi-entry indexes to avoid duplicate primary keys!
+                collection = db.visits.where('keywords').startsWith(searchWords[0]).distinct();
             } else if (activeDomainFilter) {
                 // If domain filter is active but no keywords, query by domain using compound index or domain index
                 collection = db.visits.where('domain').equals(activeDomainFilter);
@@ -824,9 +837,11 @@ document.addEventListener('DOMContentLoaded', async () => {
             // 3. In-Memory Filter Refinements (for sub-attributes)
             // If we used a keyword prefix matching, we must resolve remaining keywords, sorting and secondary filters
             if (searchWords.length > 0 || activeDomainFilter || startDateFilter || endDateFilter || activeDayOfWeekFilter !== null || activeHourOfDayFilter !== null) {
-                // Fetch only minimal object data (id, timestamp, title, url, domain) for fast filtering
-                // We resolve records in batches of 20,000 if the result set is massive
-                let records = await Promise.all(keys.slice(0, 30000).map(id => db.visits.get(id)));
+                // Fetch only minimal object data (id, timestamp, title, url, domain) using bulkGet for speed
+                const targetKeys = keys.slice(0, 30000);
+                let records = typeof db.visits.bulkGet === 'function'
+                    ? await db.visits.bulkGet(targetKeys)
+                    : await Promise.all(targetKeys.map(id => db.visits.get(id)));
                 
                 // Clear null entries
                 records = records.filter(Boolean);
@@ -930,6 +945,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             return;
         }
 
+        const currentTicket = ++renderTicket;
         const scrollTop = vsViewport.scrollTop;
 
         // Calculate index bounds based on current scroll offset
@@ -944,7 +960,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         const visibleIds = matchedIds.slice(startIndex, endIndex + 1);
         
         try {
-            const records = await Promise.all(visibleIds.map(id => db.visits.get(id)));
+            const records = typeof db.visits.bulkGet === 'function'
+                ? await db.visits.bulkGet(visibleIds)
+                : await Promise.all(visibleIds.map(id => db.visits.get(id)));
+
+            // Stale async render from previous scroll position! Discard!
+            if (currentTicket !== renderTicket) return;
 
             // Build layout string
             let html = '';
@@ -966,7 +987,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                             <span class="item-title" title="${escapeHtml(item.title)}">${escapeHtml(item.title)}</span>
                             <span class="item-domain-badge">${escapeHtml(item.domain)}</span>
                         </div>
-                        <a href="${escapeHtml(item.url)}" target="_blank" class="item-url" title="${escapeHtml(item.url)}">${escapeHtml(item.url)}</a>
+                        <a href="${escapeHtml(item.url)}" target="_blank" rel="noopener noreferrer" class="item-url" title="${escapeHtml(item.url)}">${escapeHtml(item.url)}</a>
                     </div>
                     <div class="item-right">
                         <span class="item-time">${timeStr}</span>
@@ -1113,15 +1134,16 @@ document.addEventListener('DOMContentLoaded', async () => {
             // Convert array to CSV format
             let csvContent = 'title,url,domain,timestamp,timestamp_iso\n';
             for (const r of records) {
-                const titleEscaped = `"${(r.title || '').replace(/"/g, '""')}"`;
-                const urlEscaped = `"${r.url.replace(/"/g, '""')}"`;
-                const domainEscaped = `"${r.domain.replace(/"/g, '""')}"`;
+                const titleEscaped = `"${(r.title || '').replace(/"/g, '""').replace(/\r?\n/g, ' ')}"`;
+                const urlEscaped = `"${(r.url || '').replace(/"/g, '""')}"`;
+                const domainEscaped = `"${(r.domain || '').replace(/"/g, '""')}"`;
                 const isoDate = new Date(r.timestamp).toISOString();
                 
                 csvContent += `${titleEscaped},${urlEscaped},${domainEscaped},${r.timestamp},${isoDate}\n`;
             }
 
-            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            // Prepend \uFEFF (UTF-8 BOM) so Excel renders Chinese, Arabic, and accented characters cleanly!
+            const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
             const urlBlob = URL.createObjectURL(blob);
 
             const timestampStr = new Date().toISOString().replace(/[:.]/g, '-');
@@ -1137,6 +1159,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                 if (chrome.runtime.lastError) {
                     console.error('[ChronosDashboard] Partial CSV export download failed:', chrome.runtime.lastError.message);
                 }
+                // Revoke object URL after buffer period to prevent memory leak
+                setTimeout(() => URL.revokeObjectURL(urlBlob), 60000);
             });
 
         } catch (error) {
@@ -1178,17 +1202,26 @@ document.addEventListener('DOMContentLoaded', async () => {
             runFilterAndQuery();
         });
 
-        // Date selection
+        // Date selection (using local midnight to avoid UTC offsets!)
         filterStartDate.addEventListener('change', () => {
             const val = filterStartDate.value;
-            startDateFilter = val ? new Date(val).getTime() : null;
+            if (val) {
+                const [y, m, d] = val.split('-').map(Number);
+                startDateFilter = new Date(y, m - 1, d, 0, 0, 0, 0).getTime();
+            } else {
+                startDateFilter = null;
+            }
             runFilterAndQuery();
         });
 
         filterEndDate.addEventListener('change', () => {
             const val = filterEndDate.value;
-            // Set end of date filter to 23:59:59.999
-            endDateFilter = val ? new Date(val).getTime() + (24 * 60 * 60 * 1000 - 1) : null;
+            if (val) {
+                const [y, m, d] = val.split('-').map(Number);
+                endDateFilter = new Date(y, m - 1, d, 23, 59, 59, 999).getTime();
+            } else {
+                endDateFilter = null;
+            }
             runFilterAndQuery();
         });
 

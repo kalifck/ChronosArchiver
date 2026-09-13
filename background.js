@@ -87,16 +87,27 @@ async function importExistingHistory(days) {
 }
 
 /**
- * Verifies if database is empty and automatically triggers historical import.
+ * Verifies if initial import has been completed previously.
+ * Uses persistent 'meta' table so wiped databases are never automatically re-populated.
  */
 async function checkAndInitializeDatabase() {
     try {
+        await db.open();
+        const metaRecord = await db.meta.get('initialImportDone');
+        if (metaRecord && metaRecord.value) {
+            console.log('[ChronosArchiver] Startup check: Initial history import already completed previously.');
+            return;
+        }
+
         const count = await db.visits.count();
         console.log(`[ChronosArchiver] Startup check: Database contains ${count} visits.`);
         if (count === 0) {
-            console.log('[ChronosArchiver] Database is empty. Running initial 90-day history import...');
+            console.log('[ChronosArchiver] Database is empty on fresh install. Running initial 90-day history import...');
             await importExistingHistory(90);
         }
+
+        // Persist flag so future service worker wakeups or DB wipes do not re-trigger this
+        await db.meta.put({ key: 'initialImportDone', value: true, completedAt: Date.now() });
     } catch (e) {
         console.error('[ChronosArchiver] Database startup initialization failed:', e);
     }
@@ -107,9 +118,16 @@ checkAndInitializeDatabase();
 
 // 1. Listen to history.onVisited
 chrome.history.onVisited.addListener((historyItem) => {
+    const url = historyItem.url || '';
+
+    // Ignore internal or non-web schemes to avoid polluting analytics
+    if (!url || !url.startsWith('http://') && !url.startsWith('https://')) {
+        return;
+    }
+
     // Record visit details
     const visitRecord = {
-        url: historyItem.url,
+        url: url,
         title: historyItem.title || 'Untitled Page',
         timestamp: historyItem.lastVisitTime || Date.now()
     };
@@ -138,7 +156,18 @@ chrome.runtime.onInstalled.addListener(async (details) => {
     }
 });
 
-// 4. Prevent Data Loss on Service Worker Suspend
+// 4. Handle manual re-import requests from Settings page
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    if (message && message.type === 'TRIGGER_NATIVE_IMPORT') {
+        console.log('[ChronosArchiver] Manual history re-import requested via options...');
+        importExistingHistory(message.days || 90)
+            .then(() => sendResponse({ success: true }))
+            .catch(err => sendResponse({ success: false, error: err.message }));
+        return true; // Keep channel open for async response
+    }
+});
+
+// 5. Prevent Data Loss on Service Worker Suspend
 chrome.runtime.onSuspend.addListener(() => {
     console.log('[ChronosArchiver] Service worker suspending. Flushing remaining queue...');
     flushQueue();

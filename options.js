@@ -287,6 +287,8 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             console.log('[ChronosArchiver] Clearing visits table...');
             await db.visits.clear();
+            // Retain the initialImportDone flag in meta so background service worker won't resurrect deleted history
+            await db.meta.put({ key: 'initialImportDone', value: true, wipedAt: Date.now() });
             console.log('[ChronosArchiver] Database wiped successfully.');
             alert('All stored history has been permanently deleted.');
         } catch (error) {
@@ -296,6 +298,29 @@ document.addEventListener('DOMContentLoaded', () => {
             btnWipeDb.innerHTML = 'Wipe All History';
         }
     });
+
+    // ----------------------------------------------------
+    // RE-SYNC CHROME NATIVE HISTORY
+    // ----------------------------------------------------
+    const btnReimportNative = document.getElementById('btn-reimport-native');
+    if (btnReimportNative) {
+        btnReimportNative.addEventListener('click', () => {
+            if (!confirm('Re-scan and backfill past 90 days from Chrome native history into your local vault?')) return;
+            btnReimportNative.disabled = true;
+            const originalText = btnReimportNative.innerHTML;
+            btnReimportNative.innerHTML = '<span class="btn-icon">🔄</span> Syncing...';
+
+            chrome.runtime.sendMessage({ type: 'TRIGGER_NATIVE_IMPORT', days: 90 }, (response) => {
+                btnReimportNative.disabled = false;
+                btnReimportNative.innerHTML = originalText;
+                if (response && response.success) {
+                    alert('Chrome history backfill completed successfully!');
+                } else {
+                    alert('History sync initiated. Check the dashboard in a few moments.');
+                }
+            });
+        });
+    }
 
     // ----------------------------------------------------
     // SUPPORT & CRYPTO DONATION COPY HANDLERS (WITH EASTER EGG BURST)
@@ -347,9 +372,31 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    function safeCopy(text) {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            return navigator.clipboard.writeText(text);
+        }
+        return new Promise((resolve, reject) => {
+            const temp = document.createElement('textarea');
+            temp.value = text;
+            temp.style.position = 'fixed';
+            temp.style.left = '-9999px';
+            document.body.appendChild(temp);
+            temp.select();
+            try {
+                document.execCommand('copy');
+                document.body.removeChild(temp);
+                resolve();
+            } catch (err) {
+                document.body.removeChild(temp);
+                reject(err);
+            }
+        });
+    }
+
     if (btnCopyEth && ethAddressEl) {
         btnCopyEth.addEventListener('click', () => {
-            navigator.clipboard.writeText(ethAddressEl.textContent.trim())
+            safeCopy(ethAddressEl.textContent.trim())
                 .then(() => {
                     const originalText = btnCopyEth.textContent;
                     btnCopyEth.textContent = 'Copied! ✓';
@@ -357,7 +404,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     btnCopyEth.style.borderColor = 'var(--color-success)';
                     btnCopyEth.style.color = '#FFFFFF';
                     
-                    // Trigger custom Morrocan & Crypto particle burst!
+                    // Trigger custom Moroccan & Crypto particle burst!
                     spawnParticleBurst(btnCopyEth, ['⟠', '💎', '❤️', '🇲🇦', '✨']);
                     
                     setTimeout(() => {
@@ -373,7 +420,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (btnCopyEns && ensDomainEl) {
         btnCopyEns.addEventListener('click', () => {
-            navigator.clipboard.writeText(ensDomainEl.textContent.trim())
+            safeCopy(ensDomainEl.textContent.trim())
                 .then(() => {
                     const originalText = btnCopyEns.textContent;
                     btnCopyEns.textContent = 'Copied! ✓';
@@ -381,7 +428,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     btnCopyEns.style.borderColor = 'var(--color-success)';
                     btnCopyEns.style.color = '#FFFFFF';
                     
-                    // Trigger custom Morrocan & Web Domain particle burst!
+                    // Trigger custom Moroccan & Web Domain particle burst!
                     spawnParticleBurst(btnCopyEns, ['🌐', '☕', '🇲🇦', '✨', '🔥']);
                     
                     setTimeout(() => {
