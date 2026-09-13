@@ -68,6 +68,15 @@ document.addEventListener('DOMContentLoaded', async () => {
     let lastDomainCounts = null;
     let renderTicket = 0; // Guard against out-of-order async render frames
 
+    // Time-window state for dynamic rolling queries
+    let keywordsTimeRange = 30; // 30, 90, 365, 'all'
+    let trendsTimeRange = 14;   // 14, 30, 90
+
+    // Cognitive Mindscape Neural Animation State
+    let isMindTabActive = false;
+    let mindscapeAnimFrameId = null;
+    let topRecentSearchKeywords = ['build123d', 'fiat tris', 'google', 'archiver', 'vault'];
+
     // Chart.js instances
     let chartDomains = null;
     let chartTrends = null;
@@ -115,6 +124,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             // Query database and build the interactive charts
             await updateCharts();
+
+            // Initialize Cognitive Mindscape Canvas Engine
+            initCognitiveMindscape();
 
             // Run the first search query to populate the history chronicle
             await runFilterAndQuery();
@@ -292,42 +304,59 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     /**
-     * Generates a beautifully stacked area category spikes chart over the last 14 days.
+     * Generates a beautifully stacked area category spikes chart over the selected timeframe (14D, 30D, 90D).
      */
-    async function renderTrendsChart() {
+    async function renderTrendsChart(daysCount = trendsTimeRange) {
         const labels = [];
         const now = Date.now();
         const oneDayMs = 24 * 60 * 60 * 1000;
 
         const dailyCounts = {
-            'Tech & Learning': Array(14).fill(0),
-            'Entertainment': Array(14).fill(0),
-            'Social & Forums': Array(14).fill(0),
-            'Shopping': Array(14).fill(0),
-            'Search Engines': Array(14).fill(0)
+            'Tech & Learning': Array(daysCount).fill(0),
+            'Entertainment': Array(daysCount).fill(0),
+            'Social & Forums': Array(daysCount).fill(0),
+            'Shopping': Array(daysCount).fill(0),
+            'Search Engines': Array(daysCount).fill(0)
         };
 
-        const startLimit = now - 14 * oneDayMs;
+        const startLimit = now - daysCount * oneDayMs;
         
         try {
-            // Load only visits in the last 14 days range for speed
+            // Load only visits in the selected timeframe for speed
             const records = await db.visits.where('timestamp').above(startLimit).toArray();
 
             for (const r of records) {
                 const daysAgo = Math.floor((now - r.timestamp) / oneDayMs);
-                if (daysAgo >= 0 && daysAgo < 14) {
+                if (daysAgo >= 0 && daysAgo < daysCount) {
                     const cat = getCategory(r.domain);
                     if (dailyCounts[cat]) {
-                        // Map reverse index (13 - daysAgo) to render chronologically (left to right)
-                        dailyCounts[cat][13 - daysAgo]++;
+                        dailyCounts[cat][(daysCount - 1) - daysAgo]++;
                     }
                 }
             }
 
-            for (let i = 13; i >= 0; i--) {
+            for (let i = daysCount - 1; i >= 0; i--) {
                 const date = new Date(now - i * oneDayMs);
-                labels.push(`${date.getMonth() + 1}/${date.getDate()}`);
+                if (daysCount > 30) {
+                    // Reduce label crowding for 90-day views
+                    if (i % 5 === 0 || i === 0) {
+                        labels.push(`${date.getMonth() + 1}/${date.getDate()}`);
+                    } else {
+                        labels.push('');
+                    }
+                } else {
+                    labels.push(`${date.getMonth() + 1}/${date.getDate()}`);
+                }
             }
+
+            // Compute daily total visits across all categories for the Cognitive Rhythm Analyzer
+            const dailyTotals = Array(daysCount).fill(0);
+            for (let i = 0; i < daysCount; i++) {
+                for (const cat in dailyCounts) {
+                    dailyTotals[i] += dailyCounts[cat][i];
+                }
+            }
+            updateCognitiveRhythm(dailyCounts, dailyTotals, daysCount);
 
             if (chartTrends) {
                 chartTrends.destroy();
@@ -440,19 +469,30 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     /**
-     * Gathers and renders Top Search Keywords using highly optimized index key count scans.
+     * Gathers and renders Top Search Keywords using rolling time ranges (30D, 90D, 1Y, All-Time).
+     * Automatically feeds recent keywords to the Cognitive Mindscape thought particles.
      */
-    async function renderKeywordsChart() {
+    async function renderKeywordsChart(days = keywordsTimeRange) {
         const counts = {};
 
         try {
-            // Rapidly iterate searchQuery index keys (O(log N) operations, memory-friendly)
-            await db.visits.orderBy('searchQuery').eachKey(query => {
-                if (query && query.trim()) {
-                    const lower = query.trim().toLowerCase();
-                    counts[lower] = (counts[lower] || 0) + 1;
-                }
-            });
+            if (days === 'all') {
+                // Rapidly iterate searchQuery index keys (O(log N) operations, memory-friendly)
+                await db.visits.orderBy('searchQuery').eachKey(query => {
+                    if (query && query.trim()) {
+                        const lower = query.trim().toLowerCase();
+                        counts[lower] = (counts[lower] || 0) + 1;
+                    }
+                });
+            } else {
+                const since = Date.now() - (Number(days) * 24 * 60 * 60 * 1000);
+                await db.visits.where('timestamp').above(since).each(item => {
+                    if (item.searchQuery && item.searchQuery.trim()) {
+                        const lower = item.searchQuery.trim().toLowerCase();
+                        counts[lower] = (counts[lower] || 0) + 1;
+                    }
+                });
+            }
 
             const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
 
@@ -467,6 +507,12 @@ document.addEventListener('DOMContentLoaded', async () => {
             const topKeywords = sorted.slice(0, 8);
             const labels = topKeywords.map(x => x[0]);
             const data = topKeywords.map(x => x[1]);
+
+            // Sync top recent search keywords to fuel the thought particles on the Mindscape canvas!
+            if (labels.length > 0) {
+                topRecentSearchKeywords = labels.slice(0, 8);
+                refreshThoughtParticles();
+            }
 
             if (chartKeywords) {
                 chartKeywords.destroy();
@@ -532,6 +578,486 @@ document.addEventListener('DOMContentLoaded', async () => {
         } catch (e) {
             console.error('[ChronosDashboard] Error loading search keyword chart:', e);
         }
+    }
+
+    /**
+     * Updates the Cognitive Rhythm model: momentum, hyperfocus sprints, recovery dips, and lobe HUD.
+     */
+    function updateCognitiveRhythm(dailyCounts, dailyTotals, daysCount) {
+        if (!dailyTotals || dailyTotals.length < 2) return;
+
+        const todayVisits = dailyTotals[daysCount - 1] || 0;
+        const yesterdayVisits = dailyTotals[daysCount - 2] || 0;
+        const momentum = yesterdayVisits > 0 
+            ? Math.round(((todayVisits - yesterdayVisits) / yesterdayVisits) * 100)
+            : 0;
+
+        // Calculate median baseline of active window
+        const sortedTotals = [...dailyTotals].sort((a, b) => a - b);
+        const median = sortedTotals[Math.floor(sortedTotals.length / 2)] || 1;
+
+        // Compute average sprint and dip sequences
+        let sprintLengths = [];
+        let dipLengths = [];
+        let curSprint = 0;
+        let curDip = 0;
+
+        for (let i = 0; i < daysCount; i++) {
+            if (dailyTotals[i] >= median) {
+                curSprint++;
+                if (curDip > 0) {
+                    dipLengths.push(curDip);
+                    curDip = 0;
+                }
+            } else {
+                curDip++;
+                if (curSprint > 0) {
+                    sprintLengths.push(curSprint);
+                    curSprint = 0;
+                }
+            }
+        }
+        if (curSprint > 0) sprintLengths.push(curSprint);
+        if (curDip > 0) dipLengths.push(curDip);
+
+        const avgSprint = sprintLengths.length > 0
+            ? (sprintLengths.reduce((a, b) => a + b, 0) / sprintLengths.length)
+            : 1.8;
+        const avgDip = dipLengths.length > 0
+            ? (dipLengths.reduce((a, b) => a + b, 0) / dipLengths.length)
+            : 1.1;
+
+        // Update DOM elements
+        const momentumEl = document.getElementById('rhythm-momentum');
+        const sprintLenEl = document.getElementById('rhythm-sprint-len');
+        const dipLenEl = document.getElementById('rhythm-dip-len');
+        const phasePill = document.getElementById('rhythm-status-pill');
+        const phaseLabel = document.getElementById('rhythm-phase-label');
+        const insightText = document.getElementById('rhythm-insight-text');
+
+        if (momentumEl) {
+            momentumEl.textContent = `${momentum >= 0 ? '+' : ''}${momentum}%`;
+            momentumEl.style.color = momentum >= 0 ? '#34D399' : '#60A5FA';
+        }
+        if (sprintLenEl) sprintLenEl.textContent = `${avgSprint.toFixed(1)} Days`;
+        if (dipLenEl) dipLenEl.textContent = `${avgDip.toFixed(1)} Days`;
+
+        // Phase and predictive forecast
+        if (todayVisits >= 1.25 * median || momentum >= 35) {
+            if (phasePill) phasePill.className = 'rhythm-status-pill sprint';
+            if (phaseLabel) phaseLabel.textContent = '⚡ Hyperfocus Sprint Phase';
+            if (insightText) {
+                insightText.textContent = `High-velocity focus sprint active (${todayVisits.toLocaleString()} visits, +${momentum}% vs yesterday). Your sprint rhythm averages ${avgSprint.toFixed(1)} days—historical data predicts a refractory recovery dip within 24-48 hours.`;
+            }
+        } else if (todayVisits <= 0.75 * median || momentum <= -25) {
+            if (phasePill) phasePill.className = 'rhythm-status-pill dip';
+            if (phaseLabel) phaseLabel.textContent = '🌊 Refractory Recovery Phase';
+            if (insightText) {
+                insightText.textContent = `Cognitive cooldown in progress (${todayVisits.toLocaleString()} visits, ${momentum}% vs yesterday). Your recharge dips typically reset after ${avgDip.toFixed(1)} day(s) before the next surge.`;
+            }
+        } else {
+            if (phasePill) phasePill.className = 'rhythm-status-pill steady';
+            if (phaseLabel) phaseLabel.textContent = '⚖️ Equilibrium Flow Phase';
+            if (insightText) {
+                insightText.textContent = `Browsing rhythm is balanced at baseline (${todayVisits.toLocaleString()} visits). Information ingestion is steady and sustainable.`;
+            }
+        }
+
+        // Update HUD Category Breakdown
+        let totalWindowVisits = 0;
+        const categorySums = {};
+        for (const cat in dailyCounts) {
+            const sum = dailyCounts[cat].reduce((a, b) => a + b, 0);
+            categorySums[cat] = sum;
+            totalWindowVisits += sum;
+        }
+
+        const safeTotal = Math.max(1, totalWindowVisits);
+        const techPct = Math.round(((categorySums['Tech & Learning'] || 0) / safeTotal) * 100);
+        const searchPct = Math.round(((categorySums['Search Engines'] || 0) / safeTotal) * 100);
+        const entPct = Math.round(((categorySums['Entertainment'] || 0) / safeTotal) * 100);
+        const socPct = Math.round(((categorySums['Social & Forums'] || 0) / safeTotal) * 100);
+
+        const hudTech = document.getElementById('hud-val-tech');
+        const hudSearch = document.getElementById('hud-val-search');
+        const hudEnt = document.getElementById('hud-val-entertainment');
+        const hudSoc = document.getElementById('hud-val-social');
+
+        if (hudTech) hudTech.textContent = `${techPct}%`;
+        if (hudSearch) hudSearch.textContent = `${searchPct}%`;
+        if (hudEnt) hudEnt.textContent = `${entPct}%`;
+        if (hudSoc) hudSoc.textContent = `${socPct}%`;
+
+        // Update brain lobe intensities
+        if (brainLobes && brainLobes.length >= 4) {
+            brainLobes[0].intensity = (categorySums['Tech & Learning'] || 0) / safeTotal;
+            brainLobes[1].intensity = (categorySums['Search Engines'] || 0) / safeTotal;
+            brainLobes[2].intensity = (categorySums['Entertainment'] || 0) / safeTotal;
+            brainLobes[3].intensity = (categorySums['Social & Forums'] || 0) / safeTotal;
+        }
+    }
+
+    // ----------------------------------------------------
+    // COGNITIVE MINDSCAPE: NEURAL CANVAS ANIMATION ENGINE
+    // ----------------------------------------------------
+
+    const brainLobes = [
+        { id: 'tech', name: 'Frontal (Tech & Code)', cat: 'Tech & Learning', nx: 0.36, ny: 0.40, color: '#10B981', rgb: '16, 185, 129', intensity: 0.5, radius: 24 },
+        { id: 'search', name: 'Parietal (Exploration)', cat: 'Search Engines', nx: 0.64, ny: 0.35, color: '#60A5FA', rgb: '96, 165, 250', intensity: 0.3, radius: 22 },
+        { id: 'media', name: 'Temporal (Media & Flow)', cat: 'Entertainment', nx: 0.44, ny: 0.66, color: '#818CF8', rgb: '129, 140, 248', intensity: 0.25, radius: 20 },
+        { id: 'social', name: 'Limbic (Social)', cat: 'Social & Forums', nx: 0.66, ny: 0.64, color: '#F472B6', rgb: '244, 114, 182', intensity: 0.2, radius: 20 }
+    ];
+
+    const synapticConnections = [
+        [0, 1], [0, 2], [1, 3], [2, 3], [0, 3], [1, 2]
+    ];
+
+    let hoveredLobe = null;
+    let canvasMouse = { x: -1000, y: -1000 };
+    let thoughtParticles = [];
+    let synapticPulses = [];
+    let brainCanvas = null;
+    let brainCtx = null;
+
+    function initCognitiveMindscape() {
+        brainCanvas = document.getElementById('mind-brain-canvas');
+        if (!brainCanvas) return;
+        brainCtx = brainCanvas.getContext('2d');
+
+        // Spawn traveling electrical pulses
+        synapticPulses = [];
+        for (let i = 0; i < 18; i++) {
+            const conn = synapticConnections[Math.floor(Math.random() * synapticConnections.length)];
+            synapticPulses.push({
+                from: conn[0],
+                to: conn[1],
+                t: Math.random(),
+                speed: 0.004 + Math.random() * 0.007,
+                color: Math.random() > 0.5 ? '#38BDF8' : '#A78BFA'
+            });
+        }
+
+        // Initialize thought particles with top search terms
+        refreshThoughtParticles();
+
+        // Mouse listeners
+        brainCanvas.addEventListener('mousemove', (e) => {
+            const rect = brainCanvas.getBoundingClientRect();
+            canvasMouse.x = e.clientX - rect.left;
+            canvasMouse.y = e.clientY - rect.top;
+
+            const w = brainCanvas.clientWidth;
+            const h = brainCanvas.clientHeight;
+
+            let found = null;
+            for (const lobe of brainLobes) {
+                const lx = lobe.nx * w;
+                const ly = lobe.ny * h;
+                const dist = Math.hypot(canvasMouse.x - lx, canvasMouse.y - ly);
+                if (dist <= lobe.radius + 12) {
+                    found = lobe;
+                    break;
+                }
+            }
+            hoveredLobe = found;
+            brainCanvas.style.cursor = found ? 'pointer' : 'default';
+        });
+
+        brainCanvas.addEventListener('mouseleave', () => {
+            canvasMouse.x = -1000;
+            canvasMouse.y = -1000;
+            hoveredLobe = null;
+        });
+
+        brainCanvas.addEventListener('click', (e) => {
+            const rect = brainCanvas.getBoundingClientRect();
+            const cx = e.clientX - rect.left;
+            const cy = e.clientY - rect.top;
+            const w = brainCanvas.clientWidth;
+            const h = brainCanvas.clientHeight;
+
+            // Check if user clicked a lobe
+            for (const lobe of brainLobes) {
+                const lx = lobe.nx * w;
+                const ly = lobe.ny * h;
+                const dist = Math.hypot(cx - lx, cy - ly);
+                if (dist <= lobe.radius + 12) {
+                    // Filter history by this category!
+                    searchInput.value = lobe.cat;
+                    btnClearSearch.classList.remove('hidden');
+                    runFilterAndQuery();
+                    return;
+                }
+            }
+
+            // Check if user clicked a thought particle
+            for (const p of thoughtParticles) {
+                const dist = Math.hypot(cx - p.x, cy - p.y);
+                if (dist <= 25) {
+                    searchInput.value = p.text;
+                    btnClearSearch.classList.remove('hidden');
+                    runFilterAndQuery();
+                    return;
+                }
+            }
+        });
+
+        // Wire HUD clicks
+        document.querySelectorAll('#mind-hud-overlay .hud-item').forEach(item => {
+            item.addEventListener('click', () => {
+                const cat = item.getAttribute('data-category');
+                if (cat) {
+                    searchInput.value = cat;
+                    btnClearSearch.classList.remove('hidden');
+                    runFilterAndQuery();
+                }
+            });
+        });
+    }
+
+    function refreshThoughtParticles() {
+        const pool = (topRecentSearchKeywords && topRecentSearchKeywords.length > 0)
+            ? topRecentSearchKeywords
+            : ['build123d', 'fiat tris', 'google', 'archiver', 'vault'];
+
+        thoughtParticles = [];
+        const count = Math.min(7, pool.length);
+        const w = brainCanvas ? brainCanvas.clientWidth : 400;
+        const h = brainCanvas ? brainCanvas.clientHeight : 240;
+
+        for (let i = 0; i < count; i++) {
+            thoughtParticles.push({
+                text: pool[i],
+                x: 30 + Math.random() * (w - 80),
+                y: 25 + Math.random() * (h - 70),
+                vx: (Math.random() - 0.5) * 0.35,
+                vy: (Math.random() - 0.5) * 0.35,
+                phase: Math.random() * Math.PI * 2,
+                color: i % 2 === 0 ? '#C7D2FE' : '#67E8F9'
+            });
+        }
+    }
+
+    function resizeBrainCanvas() {
+        if (!brainCanvas) return;
+        const dpr = window.devicePixelRatio || 1;
+        const w = brainCanvas.clientWidth;
+        const h = brainCanvas.clientHeight;
+
+        if (w > 0 && h > 0) {
+            brainCanvas.width = w * dpr;
+            brainCanvas.height = h * dpr;
+            brainCtx.scale(dpr, dpr);
+        }
+    }
+
+    function startMindscapeAnimation() {
+        isMindTabActive = true;
+        resizeBrainCanvas();
+        if (!mindscapeAnimFrameId) {
+            renderMindscapeFrame();
+        }
+    }
+
+    function stopMindscapeAnimation() {
+        isMindTabActive = false;
+        if (mindscapeAnimFrameId) {
+            cancelAnimationFrame(mindscapeAnimFrameId);
+            mindscapeAnimFrameId = null;
+        }
+    }
+
+    function renderMindscapeFrame(timestamp = 0) {
+        if (!isMindTabActive) return;
+
+        if (!brainCanvas || !brainCtx) {
+            mindscapeAnimFrameId = requestAnimationFrame(renderMindscapeFrame);
+            return;
+        }
+
+        const w = brainCanvas.clientWidth;
+        const h = brainCanvas.clientHeight;
+        if (w === 0 || h === 0) {
+            mindscapeAnimFrameId = requestAnimationFrame(renderMindscapeFrame);
+            return;
+        }
+
+        brainCtx.clearRect(0, 0, w, h);
+
+        const time = timestamp * 0.001;
+
+        // 1. Draw Stylized Cybernetic Cortex Silhouette (Breathing Beziers)
+        const breathe = 1 + 0.015 * Math.sin(time * 2.2);
+        const centerX = w * 0.51;
+        const centerY = h * 0.50;
+        const scaleX = (w * 0.40) * breathe;
+        const scaleY = (h * 0.40) * breathe;
+
+        brainCtx.save();
+        brainCtx.translate(centerX, centerY);
+        brainCtx.strokeStyle = 'rgba(129, 140, 248, 0.12)';
+        brainCtx.lineWidth = 1.5;
+        brainCtx.setLineDash([4, 6]);
+
+        // Outer Cranial Envelope
+        brainCtx.beginPath();
+        brainCtx.ellipse(0, 0, scaleX, scaleY, 0, 0, Math.PI * 2);
+        brainCtx.stroke();
+        brainCtx.setLineDash([]);
+
+        // Longitudinal Cerebral Fissure (Dividing the two hemispheres)
+        brainCtx.strokeStyle = 'rgba(99, 102, 241, 0.2)';
+        brainCtx.beginPath();
+        brainCtx.moveTo(0, -scaleY * 0.9);
+        brainCtx.bezierCurveTo(scaleX * 0.06, -scaleY * 0.3, -scaleX * 0.06, scaleY * 0.3, 0, scaleY * 0.9);
+        brainCtx.stroke();
+        brainCtx.restore();
+
+        // 2. Draw Synaptic Arcs between connected Lobes
+        for (const [aIdx, bIdx] of synapticConnections) {
+            const a = brainLobes[aIdx];
+            const b = brainLobes[bIdx];
+            const ax = a.nx * w;
+            const ay = a.ny * h;
+            const bx = b.nx * w;
+            const by = b.ny * h;
+            const midX = (ax + bx) / 2 + Math.sin(time + aIdx) * 6;
+            const midY = (ay + by) / 2 + Math.cos(time + bIdx) * 6;
+
+            brainCtx.beginPath();
+            brainCtx.moveTo(ax, ay);
+            brainCtx.quadraticCurveTo(midX, midY, bx, by);
+            brainCtx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+            brainCtx.lineWidth = 1;
+            brainCtx.stroke();
+        }
+
+        // 3. Draw Synaptic Traveling Sparks (Electrical Impulses)
+        for (const pulse of synapticPulses) {
+            pulse.t += pulse.speed;
+            if (pulse.t >= 1) {
+                pulse.t = 0;
+                const newConn = synapticConnections[Math.floor(Math.random() * synapticConnections.length)];
+                pulse.from = newConn[0];
+                pulse.to = newConn[1];
+            }
+
+            const a = brainLobes[pulse.from];
+            const b = brainLobes[pulse.to];
+            const ax = a.nx * w;
+            const ay = a.ny * h;
+            const bx = b.nx * w;
+            const by = b.ny * h;
+            const midX = (ax + bx) / 2;
+            const midY = (ay + by) / 2;
+
+            // Quadratic Bezier interpolation
+            const t = pulse.t;
+            const px = (1 - t) * (1 - t) * ax + 2 * (1 - t) * t * midX + t * t * bx;
+            const py = (1 - t) * (1 - t) * ay + 2 * (1 - t) * t * midY + t * t * by;
+
+            brainCtx.save();
+            brainCtx.fillStyle = pulse.color;
+            brainCtx.shadowColor = pulse.color;
+            brainCtx.shadowBlur = 8;
+            brainCtx.beginPath();
+            brainCtx.arc(px, py, 2.2, 0, Math.PI * 2);
+            brainCtx.fill();
+            brainCtx.restore();
+        }
+
+        // 4. Draw Brain Lobes (Functional Energy Zones)
+        for (const lobe of brainLobes) {
+            const lx = lobe.nx * w;
+            const ly = lobe.ny * h;
+            const isHovered = hoveredLobe === lobe;
+            const baseRad = lobe.radius * (0.85 + lobe.intensity * 0.4);
+            const pulseRad = baseRad + Math.sin(time * 3 + lobe.nx * 10) * 2;
+
+            // Outer Radial Aura Glow
+            const glow = brainCtx.createRadialGradient(lx, ly, 2, lx, ly, pulseRad * 1.8);
+            glow.addColorStop(0, `rgba(${lobe.rgb}, ${0.35 + lobe.intensity * 0.3})`);
+            glow.addColorStop(1, `rgba(${lobe.rgb}, 0)`);
+            brainCtx.fillStyle = glow;
+            brainCtx.beginPath();
+            brainCtx.arc(lx, ly, pulseRad * 1.8, 0, Math.PI * 2);
+            brainCtx.fill();
+
+            // Core Energy Circle
+            brainCtx.fillStyle = lobe.color;
+            brainCtx.beginPath();
+            brainCtx.arc(lx, ly, pulseRad * 0.6, 0, Math.PI * 2);
+            brainCtx.fill();
+
+            // Inner Core Hotspot
+            brainCtx.fillStyle = '#FFFFFF';
+            brainCtx.beginPath();
+            brainCtx.arc(lx, ly, 2.5, 0, Math.PI * 2);
+            brainCtx.fill();
+
+            // Hover Neon Aura
+            if (isHovered) {
+                brainCtx.save();
+                brainCtx.strokeStyle = '#FFFFFF';
+                brainCtx.shadowColor = lobe.color;
+                brainCtx.shadowBlur = 12;
+                brainCtx.lineWidth = 1.5;
+                brainCtx.beginPath();
+                brainCtx.arc(lx, ly, pulseRad + 6, 0, Math.PI * 2);
+                brainCtx.stroke();
+                brainCtx.restore();
+            }
+
+            // Lobe Label & Category
+            brainCtx.font = '600 9px Inter, system-ui, sans-serif';
+            brainCtx.fillStyle = isHovered ? '#FFFFFF' : 'rgba(241, 245, 249, 0.85)';
+            brainCtx.textAlign = 'center';
+            brainCtx.fillText(lobe.cat, lx, ly + pulseRad + 13);
+        }
+
+        // 5. Draw Floating Thought Impulses (Search Keywords drifting through consciousness)
+        for (const p of thoughtParticles) {
+            p.x += p.vx;
+            p.y += p.vy;
+
+            // Wrap around boundaries
+            if (p.x < 15) p.x = w - 25;
+            if (p.x > w - 20) p.x = 20;
+            if (p.y < 20) p.y = h - 50;
+            if (p.y > h - 45) p.y = 25;
+
+            const floatY = p.y + Math.sin(time * 1.5 + p.phase) * 3;
+
+            // Pill box dimensions
+            brainCtx.font = '500 8.5px Inter, system-ui, monospace';
+            const textWidth = brainCtx.measureText(p.text).width;
+            const boxW = textWidth + 14;
+            const boxH = 16;
+            const boxX = p.x - boxW / 2;
+            const boxY = floatY - boxH / 2;
+
+            // Pill background
+            brainCtx.fillStyle = 'rgba(15, 23, 42, 0.72)';
+            brainCtx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
+            brainCtx.lineWidth = 1;
+            brainCtx.beginPath();
+            brainCtx.roundRect(boxX, boxY, boxW, boxH, 8);
+            brainCtx.fill();
+            brainCtx.stroke();
+
+            // Tiny dot indicator
+            brainCtx.fillStyle = p.color;
+            brainCtx.beginPath();
+            brainCtx.arc(boxX + 6, floatY, 2, 0, Math.PI * 2);
+            brainCtx.fill();
+
+            // Text
+            brainCtx.fillStyle = '#E2E8F0';
+            brainCtx.textAlign = 'left';
+            brainCtx.fillText(p.text, boxX + 11, floatY + 3);
+        }
+
+        mindscapeAnimFrameId = requestAnimationFrame(renderMindscapeFrame);
     }
 
     /**
@@ -1256,6 +1782,30 @@ document.addEventListener('DOMContentLoaded', async () => {
             });
         }
 
+        // Keywords Time-Window Pills
+        const keywordsPillBtns = document.querySelectorAll('#keywords-time-pills .pill-btn');
+        keywordsPillBtns.forEach(pBtn => {
+            pBtn.addEventListener('click', async () => {
+                keywordsPillBtns.forEach(b => b.classList.remove('active'));
+                pBtn.classList.add('active');
+                const range = pBtn.getAttribute('data-range');
+                keywordsTimeRange = range === 'all' ? 'all' : parseInt(range, 10);
+                await renderKeywordsChart(keywordsTimeRange);
+            });
+        });
+
+        // Trends Time-Window Pills
+        const trendsPillBtns = document.querySelectorAll('#trends-time-pills .pill-btn');
+        trendsPillBtns.forEach(pBtn => {
+            pBtn.addEventListener('click', async () => {
+                trendsPillBtns.forEach(b => b.classList.remove('active'));
+                pBtn.classList.add('active');
+                const range = parseInt(pBtn.getAttribute('data-range'), 10);
+                trendsTimeRange = range;
+                await renderTrendsChart(trendsTimeRange);
+            });
+        });
+
         // Premium Segmented Control Tabs Event Listeners
         const tabButtons = document.querySelectorAll('.tab-btn');
         const tabPanels = document.querySelectorAll('.analytics-tab-panel');
@@ -1276,6 +1826,13 @@ document.addEventListener('DOMContentLoaded', async () => {
                     targetPanel.classList.add('active');
                 }
 
+                // Activate or pause Cognitive Mindscape neural animation loop
+                if (targetTabId === 'tab-mind') {
+                    startMindscapeAnimation();
+                } else {
+                    stopMindscapeAnimation();
+                }
+
                 // Smooth Chart.js redraw to fix 0-width dimensions from hidden tab state
                 setTimeout(() => {
                     if (targetTabId === 'tab-domains' && chartDomains) {
@@ -1287,9 +1844,17 @@ document.addEventListener('DOMContentLoaded', async () => {
                     } else if (targetTabId === 'tab-keywords' && chartKeywords) {
                         chartKeywords.resize();
                         chartKeywords.update();
+                    } else if (targetTabId === 'tab-mind') {
+                        resizeBrainCanvas();
                     }
                 }, 50);
             });
+        });
+
+        window.addEventListener('resize', () => {
+            if (isMindTabActive) {
+                resizeBrainCanvas();
+            }
         });
     }
 

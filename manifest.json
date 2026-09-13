@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "ChronosArchiver - Permanent Local History",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "description": "Permanently stores your browsing history locally in IndexedDB, bypassing the 90-day limit, with advanced interactive analytics.",
   "permissions": [
     "history",

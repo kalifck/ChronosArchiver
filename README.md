@@ -9,14 +9,16 @@ ChronosArchiver is a production-grade, highly optimized, and **100% private** Ch
 ## 🌟 Core Features
 
 * **🔒 100% Local & Private First**: All indexing and storage occurs entirely on your device using IndexedDB. Zero external network calls, zero tracking, zero data collections.
+* **🧠 Cognitive Mindscape (Neural Brain Canvas)**: Real-time interactive 2D Canvas neural model visualizing cognitive lobes (*Tech, Exploration, Media, Social*), pulsating synaptic connections, electric impulses, and floating thought particles carrying recent search queries.
+* **🌊 Cognitive Rhythm & Sprint-Dip Meter**: Mathematical refractory model explaining browsing momentum and focus waves—detecting when you are in a **Hyperfocus Sprint** vs. a **Recovery Dip** phase.
 * **📂 Uncapped Persistent Storage**: Holds 500,000+ visit records seamlessly by utilizing Dexie's index-only cursor scans to perform statistics and search queries without loading bulk rows into RAM.
 * **⚡ 60FPS DOM Virtual Scroll**: Custom-engineered virtualized list chronicle that renders only 20–30 DOM rows in the viewport, pulling records by primary key dynamically during scrolls to prevent browser lag.
 * **📅 Interactive "When" Heatmap**: A custom HTML/CSS Grid (7 days × 24 hours) showing hourly density. Click any cell to instantly filter your entire history to visits that occurred during that specific hour and weekday.
-* **🔍 "What" Multi-Word Keyword Search**: Uses a dynamic multi-entry prefix index (`*keywords`) to deliver instant results over massive datasets. Features automatic query extraction for Google, YouTube, Bing, Yahoo, DuckDuckGo, GitHub, and Reddit.
-* **📈 Stacked Interest Trends**: Line chart displaying your topic interest spikes (*Tech & Learning, Entertainment, Forums, Shopping, and Search Engines*) over a rolling 14-day timeline.
+* **🔍 "What" Multi-Word Keyword Search with Rolling Windows**: Uses a dynamic multi-entry prefix index (`*keywords`) with quick time-range toggles (**30D | 90D | 1Y | All Time**) to pinpoint evolving search interests over time.
+* **📈 Stacked Interest Trends (14D | 30D | 90D)**: Line chart displaying your topic interest spikes (*Tech & Learning, Entertainment, Forums, Shopping, and Search Engines*) over customizable rolling timelines.
 * **🍩 Domain & Subpath Drill-Down**: Interactive doughnut chart showing top domains. Click a slice to filter, revealing an active drill-down pane that parses and ranks the top subdirectories you browse (e.g., specific subreddits or GitHub repositories).
 * **📤 Instant JSON & CSV Migrations**: Export your custom query segments to a CSV instantly via Chrome's native downloads API, or drag-and-drop chunked JSON backups to move your database to a new system.
-* **🇲🇦 Built in Morocco with Pizzazz**: Warm personal greeting and a fully animated **"Confetti & Emoji Spawner"** easter egg triggered when copying your support addresses!
+* **🇲🇦 Built with Antigravity in Morocco**: Engineered with **⚡ Google Antigravity**, featuring a warm greeting and an animated **"Confetti & Emoji Spawner"** easter egg when copying support addresses!
 
 ---
 
@@ -80,7 +82,7 @@ ChronosArchiver is free and open-source. If thispersistent offline vault has sav
 * 💎 **Ethereum (ETH) Address**: `0xA3f17d559900FEA12C18C184C2483E53626FED62`
 * 🌐 **ENS Domain**: `charif.eth`
 
-*Built with 💻, ☕, and love in **Morocco 🇲🇦 Salam!***
+*Built with 💻, ⚡ Google Antigravity, ☕, and love in **Morocco 🇲🇦 Salam!***
 
 ---
 

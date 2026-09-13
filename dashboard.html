@@ -20,7 +20,7 @@
                 <span class="logo-icon">⏳</span>
                 <div class="brand-text">
                     <h1>ChronosArchiver</h1>
-                    <p>Uncapped Local Browsing Vault</p>
+                    <p>Uncapped Local Vault • Built with <span class="antigravity-tag">⚡ Antigravity</span></p>
                 </div>
             </div>
 
@@ -143,6 +143,7 @@
                     <button class="tab-btn active" data-tab="tab-heatmap">📅 When</button>
                     <button class="tab-btn" data-tab="tab-keywords">🔍 What</button>
                     <button class="tab-btn" data-tab="tab-trends">📈 Trends</button>
+                    <button class="tab-btn" data-tab="tab-mind">🧠 Mind</button>
                     <button class="tab-btn" data-tab="tab-domains">🍩 Who</button>
                     <button class="tab-btn" data-tab="tab-insights">💡 Insights</button>
                 </div>
@@ -179,11 +180,19 @@
                     <!-- Panel 2: Top Search Keywords (What) -->
                     <div class="analytics-tab-panel" id="tab-keywords">
                         <div class="chart-card tall-chart-card">
-                            <h3>Top Search Keywords</h3>
+                            <div class="card-header-with-pills">
+                                <h3>Top Search Keywords</h3>
+                                <div class="time-pills" id="keywords-time-pills">
+                                    <button class="pill-btn active" data-range="30">30D</button>
+                                    <button class="pill-btn" data-range="90">90D</button>
+                                    <button class="pill-btn" data-range="365">1Y</button>
+                                    <button class="pill-btn" data-range="all">All</button>
+                                </div>
+                            </div>
                             <div class="chart-container">
                                 <canvas id="chart-top-keywords"></canvas>
                                 <div class="chart-placeholder hidden" id="keywords-chart-placeholder">
-                                    <span>No search queries found.</span>
+                                    <span>No search queries found in this timeframe.</span>
                                 </div>
                             </div>
                         </div>
@@ -192,11 +201,89 @@
                     <!-- Panel 3: Stacked Category Spikes (Trends) -->
                     <div class="analytics-tab-panel" id="tab-trends">
                         <div class="chart-card tall-chart-card">
-                            <h3>Topic Spikes (Category Timeline)</h3>
+                            <div class="card-header-with-pills">
+                                <h3>Topic Spikes (Category Timeline)</h3>
+                                <div class="time-pills" id="trends-time-pills">
+                                    <button class="pill-btn active" data-range="14">14D</button>
+                                    <button class="pill-btn" data-range="30">30D</button>
+                                    <button class="pill-btn" data-range="90">90D</button>
+                                </div>
+                            </div>
                             <div class="chart-container">
                                 <canvas id="chart-visits-trend"></canvas>
                                 <div class="chart-placeholder hidden" id="trend-chart-placeholder">
                                     <span>No category spike data.</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Panel 4: Cognitive Mindscape (Neural Brain & Rhythm) -->
+                    <div class="analytics-tab-panel" id="tab-mind">
+                        <div class="chart-card tall-chart-card mind-card">
+                            <div class="mind-card-header">
+                                <div class="mind-title-row">
+                                    <h3>Cognitive Mindscape</h3>
+                                    <span class="mind-badge">Digital Consciousness</span>
+                                </div>
+                                <span class="card-subtitle">Real-time synaptic modeling of your browsing focus & information ingestion</span>
+                            </div>
+
+                            <!-- Interactive Neural Canvas -->
+                            <div class="mind-canvas-wrapper">
+                                <canvas id="mind-brain-canvas"></canvas>
+                                <div class="mind-canvas-hint">⚡ Synaptic particles carry top search thoughts • Click any lobe to filter history</div>
+
+                                <!-- Overlay Lobe HUD -->
+                                <div class="mind-hud-overlay" id="mind-hud-overlay">
+                                    <div class="hud-item" data-category="Tech & Learning" title="Click to filter by Tech & Learning">
+                                        <span class="hud-dot tech"></span>
+                                        <span class="hud-label">Frontal (Tech & Code):</span>
+                                        <span class="hud-val" id="hud-val-tech">0%</span>
+                                    </div>
+                                    <div class="hud-item" data-category="Search Engines" title="Click to filter by Search Engines">
+                                        <span class="hud-dot search"></span>
+                                        <span class="hud-label">Parietal (Exploration):</span>
+                                        <span class="hud-val" id="hud-val-search">0%</span>
+                                    </div>
+                                    <div class="hud-item" data-category="Entertainment" title="Click to filter by Entertainment">
+                                        <span class="hud-dot entertainment"></span>
+                                        <span class="hud-label">Temporal (Media & Flow):</span>
+                                        <span class="hud-val" id="hud-val-entertainment">0%</span>
+                                    </div>
+                                    <div class="hud-item" data-category="Social & Forums" title="Click to filter by Social & Forums">
+                                        <span class="hud-dot social"></span>
+                                        <span class="hud-label">Limbic (Social & Dopamine):</span>
+                                        <span class="hud-val" id="hud-val-social">0%</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Cognitive Sprint vs Dip Rhythm Meter -->
+                            <div class="rhythm-meter-card" id="rhythm-meter-card">
+                                <div class="rhythm-header">
+                                    <div class="rhythm-status-pill" id="rhythm-status-pill">
+                                        <span class="pulse-dot"></span>
+                                        <span id="rhythm-phase-label">Hyperfocus Sprint Phase</span>
+                                    </div>
+                                    <span class="rhythm-subtitle">Cognitive Volatility & Refractory Wave Model</span>
+                                </div>
+                                <div class="rhythm-stats-row">
+                                    <div class="rhythm-stat">
+                                        <span class="r-label">Recent Momentum</span>
+                                        <span class="r-val highlight" id="rhythm-momentum">+0%</span>
+                                    </div>
+                                    <div class="rhythm-stat">
+                                        <span class="r-label">Avg Sprint</span>
+                                        <span class="r-val" id="rhythm-sprint-len">-</span>
+                                    </div>
+                                    <div class="rhythm-stat">
+                                        <span class="r-label">Avg Recovery Dip</span>
+                                        <span class="r-val" id="rhythm-dip-len">-</span>
+                                    </div>
+                                </div>
+                                <div class="rhythm-insight" id="rhythm-insight-text">
+                                    Analyzing cognitive cycles across your browsing history...
                                 </div>
                             </div>
                         </div>
